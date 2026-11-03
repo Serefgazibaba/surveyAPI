@@ -225,7 +225,7 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 | API-22 | GET | `/admin/surveys/{surveyId}` | Anket + soru + seçenek ağacı; izinli aksiyonlar | FR-11 |
 | API-24 | DELETE | `/admin/surveys/{surveyId}` | Sil (yalnızca DRAFT) | BR-08 |
 | API-25 | POST | `/surveys/{surveyId}/duplicate` | Kopyala (katılımcı/yanıt hariç) | FR-11 |
-| API-25a | GET | `/admin/getUsers` | Davet edilebilecek kullanıcılar (USER, aktif); arama + sayfalama | FR-40 |
+| API-25a | GET | `/admin/getAllUsers` | Davet edilebilecek kullanıcılar (USER, aktif); arama + sayfalama | FR-40 |
 | API-26 | POST | `/admin/publishSurvey` | Yayınla: `{surveyId, userIds[]}` → tamlık kontrolü, davet oluştur, DRAFT → PUBLISHED; e-posta henüz yok, linkler yanıtta | FR-42, FR-22, FR-20 |
 | API-27 | POST | `/surveys/{surveyId}/close` | Manuel kapat | 3.2 |
 | API-28 | POST | `/surveys/{surveyId}/archive` | Arşivle | 3.2 |

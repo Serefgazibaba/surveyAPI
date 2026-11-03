@@ -87,7 +87,7 @@ public class AdminSurveyController {
     @PostMapping("/publishSurvey")
     @Operation(operationId = "adminPublishSurvey", summary = "Anketi yayınla",
             description = """
-                    Seçilen katılımcılar (GET /admin/getUsers) için davet oluşturur ve anketi DRAFT → PUBLISHED yapar.
+                    Seçilen katılımcılar (GET /admin/getAllUsers) için davet oluşturur ve anketi DRAFT → PUBLISHED yapar.
                     Önce tamlık kuralları kontrol edilir; eksikler 422 SURVEY_INCOMPLETE ile tek seferde döner.
                     E-posta henüz gönderilmez: davete özel linkler yanıtta döner (geçici).""")
     public PublishSurveyResponse publish(@AuthenticationPrincipal Jwt jwt,

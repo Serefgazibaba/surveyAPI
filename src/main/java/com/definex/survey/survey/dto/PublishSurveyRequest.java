@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * @param userIds davet edilecek katılımcılar ({@code GET /admin/getUsers}); tekrarlananlar tekilleştirilir
+ * @param userIds davet edilecek katılımcılar ({@code GET /admin/getAllUsers}); tekrarlananlar tekilleştirilir
  */
 public record PublishSurveyRequest(
         @NotNull UUID surveyId,

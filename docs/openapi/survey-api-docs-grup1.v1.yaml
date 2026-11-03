@@ -394,10 +394,10 @@ paths:
                 status: 409
                 code: SURVEY_NOT_DELETABLE
 
-  /admin/getUsers:
+  /admin/getAllUsers:
     get:
       tags: [Admin - Users]
-      operationId: adminGetUsers
+      operationId: adminGetAllUsers
       summary: Davet edilebilecek kullanıcıları listele
       description: |
         Anket düzenleme ekranında katılımcı seçimi için kullanılır. Yalnızca `USER` rolündeki aktif kullanıcılar
@@ -431,7 +431,7 @@ paths:
       operationId: adminPublishSurvey
       summary: Anketi yayınla
       description: |
-        "Gönder" aksiyonu (FR-42). Seçilen katılımcılar (`GET /admin/getUsers`) için davet oluşturur ve anketi
+        "Gönder" aksiyonu (FR-42). Seçilen katılımcılar (`GET /admin/getAllUsers`) için davet oluşturur ve anketi
         `DRAFT` → `PUBLISHED` yapar.
 
         **Kontroller (sırayla)**

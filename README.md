@@ -74,7 +74,7 @@ com.definex.survey
 ├─ security/    SecurityFilterChain, JWT encoder/decoder, JwtTokenService, Roles, 401/403 handler'ları
 ├─ exception/   GlobalExceptionHandler, ProblemDetailFactory, ApiException ve alt sınıfları
 ├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
-├─ auth/        /admin/auth/*, /user/auth/*, /admin/getUsers
+├─ auth/        /admin/auth/*, /user/auth/*, /admin/getAllUsers
 ├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey (anket → sorular → seçenekler, davetler)
 ├─ report/      /admin/surveys/{surveyId}/report*
 └─ user/        katılımcı tarafı: /user/surveys/* (form, ara kayıt, yanıt gönderimi)
@@ -215,7 +215,7 @@ döner ve dev profilinde log'a yazılır.
 
 ```bash
 # 1. Davet edilebilecek kullanıcılar (ad/e-posta araması, sayfalı)
-curl -s "http://localhost:8080/api/v1/admin/getUsers?q=zeynep&page=1&size=20" \
+curl -s "http://localhost:8080/api/v1/admin/getAllUsers?q=zeynep&page=1&size=20" \
   -H "Authorization: Bearer <accessToken>"
 
 # 2. Yayınla → 200; anket PUBLISHED olur, davet linkleri döner

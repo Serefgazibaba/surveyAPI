@@ -26,11 +26,11 @@ public class AdminUserController {
         this.userDirectoryService = userDirectoryService;
     }
 
-    @GetMapping("/getUsers")
-    @Operation(operationId = "adminGetUsers", summary = "Davet edilebilecek kullanıcıları listele",
+    @GetMapping("/getAllUsers")
+    @Operation(operationId = "adminGetAllUsers", summary = "Davet edilebilecek kullanıcıları listele",
             description = "USER rolündeki aktif kullanıcıları ada göre sıralı ve sayfalı döner; anket düzenleme ekranında "
                     + "katılımcı seçimi için kullanılır.")
-    public UserListResponse getUsers(
+    public UserListResponse getAllUsers(
             @Parameter(description = "Ad veya e-postada arama") @RequestParam(required = false) @Size(max = 100) String q,
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
