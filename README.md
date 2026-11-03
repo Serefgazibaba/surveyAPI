@@ -74,7 +74,7 @@ com.definex.survey
 ├─ exception/   GlobalExceptionHandler, ProblemDetailFactory, ApiException ve alt sınıfları
 ├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
 ├─ auth/        /admin/auth/*, /user/auth/*
-├─ survey/      /admin/surveys/* (anket → sorular → seçenekler; kaydetme upsert)
+├─ survey/      /admin/surveys/*, /admin/upsertSurvey (anket → sorular → seçenekler)
 ├─ report/      /admin/surveys/{surveyId}/report*
 └─ user/        katılımcı tarafı: /user/surveys/* (form, ara kayıt, yanıt gönderimi)
 ```
@@ -166,14 +166,14 @@ curl -i -X POST http://localhost:8080/api/v1/admin/auth/logout -H "Authorization
 
 ## Örnek istekler (Admin anketler)
 
-Anket yapısı bölümsüzdür: anket → sorular → seçenekler. Oluşturma ve güncelleme tek uçtan yapılır: **`POST /admin/surveys/upsert`**.
+Anket yapısı bölümsüzdür: anket → sorular → seçenekler. Oluşturma ve güncelleme tek uçtan yapılır: **`POST /admin/upsertSurvey`**.
 gövdede `id` yoksa yeni taslak oluşur (`201`), varsa güncellenir (`200`). Sorular ve seçenekler için de `id`'li olan
 güncellenir, `id`'siz olan eklenir, listede olmayan silinir; dizi sırası = gösterim sırası. Kaydetmede yalnızca
 `title` zorunludur.
 
 ```bash
 # 1. İlk kayıt (id yok) → 201; yanıtta anket, soru ve seçenek id'leri döner
-curl -s -X POST http://localhost:8080/api/v1/admin/surveys/upsert \
+curl -s -X POST http://localhost:8080/api/v1/admin/upsertSurvey \
   -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
   -d '{"title":"2026 Q4 Çalışan Memnuniyeti","responseMode":"ANONYMOUS",
        "questions":[{"text":"Şirketimizde çalışmaktan memnunum.","type":"LIKERT","required":true},
@@ -182,7 +182,7 @@ curl -s -X POST http://localhost:8080/api/v1/admin/surveys/upsert \
 
 # 2. Sonraki kayıt (id'ler geri gönderilir) → 200
 #    Likert sorusu listede olmadığı için silinir, yeni seçenek eklenir.
-curl -s -X POST http://localhost:8080/api/v1/admin/surveys/upsert \
+curl -s -X POST http://localhost:8080/api/v1/admin/upsertSurvey \
   -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
   -d '{"id":"<surveyId>","title":"2026 Q4 Çalışan Memnuniyeti","responseMode":"ANONYMOUS",
        "endsAt":"2026-11-30T21:00:00Z",

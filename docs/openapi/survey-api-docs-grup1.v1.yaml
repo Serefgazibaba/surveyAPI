@@ -28,7 +28,7 @@ info:
     - Hatalar `application/problem+json` (RFC 7807) formatındadır; makine tarafından okunacak alan `code`'dur.
     - Admin yalnızca kendi anketlerine erişir (BR-09). Başkasına ait anket için `404` döner (varlık sızdırılmaz).
     - Anket yapısı bölümsüzdür: anket → sorular → seçenekler. Anket oluşturma ve güncelleme tek uçtan yapılır
-      (`POST /admin/surveys/upsert`); eşzamanlı düzenlemede son kaydeden kazanır.
+      (`POST /admin/upsertSurvey`); eşzamanlı düzenlemede son kaydeden kazanır.
 
     **Versiyonlama**
     - Major sürüm URL'de taşınır: `/api/v1`. Bu doküman v1 sözleşmesidir.
@@ -207,7 +207,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /admin/surveys/upsert:
+  /admin/upsertSurvey:
     post:
       tags: [Admin - Surveys]
       operationId: adminUpsertSurvey

@@ -227,7 +227,7 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
 | API-20 | GET | `/admin/surveys` | Liste: arama, durum filtresi, sıralama, sayfalama; soru sayısı | FR-10, BR-09 |
-| API-21 | POST | `/admin/surveys/upsert` | **Kaydet (upsert)**: `id` yoksa oluştur, varsa güncelle; sorular ve seçenekler gövdede | FR-12, FR-20, FR-27, BR-04, BR-05 |
+| API-21 | POST | `/admin/upsertSurvey` | **Kaydet (upsert)**: `id` yoksa oluştur, varsa güncelle; sorular ve seçenekler gövdede | FR-12, FR-20, FR-27, BR-04, BR-05 |
 | API-22 | GET | `/admin/surveys/{surveyId}` | Anket + soru + seçenek ağacı; izinli aksiyonlar | FR-11 |
 | API-24 | DELETE | `/admin/surveys/{surveyId}` | Sil (yalnızca DRAFT) | BR-08 |
 | API-25 | POST | `/surveys/{surveyId}/duplicate` | Kopyala (katılımcı/yanıt hariç) | FR-11 |

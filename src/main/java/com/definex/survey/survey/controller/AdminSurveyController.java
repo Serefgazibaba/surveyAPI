@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
-@RequestMapping("/admin/surveys")
+@RequestMapping("/admin")
 @Validated
 @Tag(name = "Admin - Surveys", description = "Anket yönetimi")
 public class AdminSurveyController {
@@ -47,7 +47,7 @@ public class AdminSurveyController {
         this.surveyService = surveyService;
     }
 
-    @GetMapping
+    @GetMapping("/surveys")
     @Operation(operationId = "adminListSurveys", summary = "Anketleri listele",
             description = "Admin'in anketlerini sayfalı döner. `status` verilmezse ARCHIVED hariç tümü listelenir.")
     public SurveyListResponse list(
@@ -61,7 +61,7 @@ public class AdminSurveyController {
         return surveyService.list(ownerId(jwt), q, status, parseSort(sort), page, size);
     }
 
-    @PostMapping("/upsert")
+    @PostMapping("/upsertSurvey")
     @Operation(operationId = "adminUpsertSurvey", summary = "Anketi kaydet (upsert: oluştur / güncelle)",
             description = """
                     Upsert. Gövdede `id` yoksa yeni taslak anket oluşturulur (201), varsa güncellenir (200).
@@ -79,13 +79,13 @@ public class AdminSurveyController {
         return ResponseEntity.created(location).body(result.survey());
     }
 
-    @GetMapping("/{surveyId}")
+    @GetMapping("/surveys/{surveyId}")
     @Operation(operationId = "adminGetSurvey", summary = "Anketi getir", description = "Anketi soruları ve seçenekleriyle döner.")
     public SurveyDetailResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID surveyId) {
         return surveyService.get(ownerId(jwt), surveyId);
     }
 
-    @DeleteMapping("/{surveyId}")
+    @DeleteMapping("/surveys/{surveyId}")
     @Operation(operationId = "adminDeleteSurvey", summary = "Anketi sil", description = "Yalnızca taslak (DRAFT) anketler silinebilir.")
     public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID surveyId) {
         surveyService.delete(ownerId(jwt), surveyId);
