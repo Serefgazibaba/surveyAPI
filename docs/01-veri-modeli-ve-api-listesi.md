@@ -18,7 +18,6 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 | T02b| `login_attempts`          | (e-posta, IP) bazlı hatalı giriş sayacı ve kilit                     | MVP    | FR-01                     |
 | T03 | `password_reset_tokens`   | Süreli şifre sıfırlama linkleri                                      | MVP    | FR-03                     |
 | T04 | `surveys`                 | Anket ana kaydı ve yaşam döngüsü durumu                              | MVP    | FR-10–12, FR-20, FR-50–52 |
-| T05 | `survey_sections`         | Anket bölümleri (formda sayfa)                                       | MVP    | FR-21, FR-24              |
 | T06 | `questions`               | Sorular; tipe özel ayarlar JSON                                      | MVP    | FR-22–25, 4.4             |
 | T07 | `question_options`        | Seçimli soruların seçenekleri                                        | MVP    | FR-22, 4.4                |
 | T08 | `survey_shares`           | Anketin başka Admin’lerle paylaşımı / ortak sahiplik                 | F2     | BR-09, Q-07               |
@@ -91,43 +90,41 @@ id, user_id FK, token_hash, expires_at, used_at NULL, created_at.
 | Kolon | Tip | Not |
 |---|---|---|
 | id | uuid PK | |
-| owner_id | uuid FK → users | BR-09 |
-| template_id | uuid FK NULL → templates | şablondan üretildiyse; şablon silinse de NULL’a çekilir (FR-31) |
-| title | string | zorunlu |
-| description | text NULL | |
-| status | enum | `DRAFT`, `PUBLISHED`, `EXPIRED`, `CLOSED`, `ARCHIVED` |
-| status_before_archive | enum NULL | “Geri al → önceki durum” için |
-| response_mode | enum | `ANONYMOUS`, `IDENTIFIED`; yayından sonra değişmez (BR-05) |
-| ends_at | timestamp | zorunlu, geçmiş olamaz; Europe/Istanbul gösterim (FR-50) |
-| auto_reminder_days_before | int NULL | FR-44 otomatik hatırlatma |
-| contact_info | string NULL | hata sayfasında gösterilecek iletişim (FR-65) |
+| owner_id | uuid | admin'in user id'si (BR-09); modül sınırı nedeniyle JPA ilişkisi yok |
+| title | string | kaydetmede zorunlu |
+| description | string NULL | |
+| status | enum | `DRAFT`, `PUBLISHED`, `EXPIRED`, `CLOSED`, `ARCHIVED`; ilk kayıtta `DRAFT` |
+| response_mode | enum NULL | `ANONYMOUS`, `IDENTIFIED`; yayında zorunlu, sonra değişmez (BR-05) |
+| ends_at | timestamp NULL | yayında zorunlu ve gelecekte (FR-20); Europe/Istanbul gösterim (FR-50) |
 | published_at / closed_at / archived_at | timestamp NULL | |
-| row_version | int | eşzamanlı düzenleme koruması |
 | created_at / updated_at | timestamp | |
 
-#### T05 `survey_sections`
-id, survey_id FK, title, description NULL, sort_order. Her ankette en az 1 bölüm (varsayılan otomatik açılır — FR-21).
+Taslak yarım kaydedilebildiği için `title` dışındaki alanlar nullable'dır; tamlık yayınlamada kontrol edilir.
+Eşzamanlı düzenlemede son kaydeden kazanır (sürüm kolonu yok). Şu kolonlar ilgili özellikler geldiğinde eklenecek:
+`template_id` (FR-31), `status_before_archive`, `auto_reminder_days_before` (FR-44), `contact_info` (FR-65).
+
+> Anket yapısı **bölümsüzdür**: anket → sorular → seçenekler. `survey_sections` tablosu yoktur.
 
 #### T06 `questions`
 | Kolon | Tip | Not |
 |---|---|---|
 | id | uuid PK | |
-| survey_id | uuid FK | sorgu kolaylığı için denormalize |
-| section_id | uuid FK | |
-| text | text | |
-| type | string | `LIKERT`, `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `FREE_TEXT` (enum değil string → NFR-20 genişletilebilirlik) |
-| is_required | bool | |
-| sort_order | int | |
-| settings | json | tipe özel: Likert `{scale, minLabel, maxLabel}`, çoklu `{minSelect, maxSelect}`, metin `{multiline, maxLength}`, tekli `{allowOther, display}` |
+| survey_id | uuid FK | |
+| sort_order | int | gösterim sırası; soru numarası = sort_order + 1 |
+| text | string NULL | yayında zorunlu |
+| type | string NULL | `LIKERT`, `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `FREE_TEXT`; CHECK kısıtı yok (NFR-20 genişletilebilirlik) |
+| required | bool | |
+| settings | jsonb NULL | tipe özel, varsayılanlarla tamamlanır: Likert `{scale, minLabel, maxLabel}`, tekli `{allowOther, display}`, çoklu `{allowOther, minSelect, maxSelect}`, metin `{multiline, maxLength}` |
+| created_at / updated_at | timestamp | |
 
 #### T07 `question_options`
-id, question_id FK, label, value, sort_order, is_other (bool, “Diğer” alanı).
+id, question_id FK, sort_order, label NULL, created_at, updated_at. "Diğer" seçeneği ayrı satır değil; sorunun `settings.allowOther` alanıyla ifade edilir.
 
 #### T08 `survey_shares` (F2)
 survey_id FK, user_id FK, role (`CO_OWNER`, `VIEWER`), created_at. PK (survey_id, user_id).
 
 #### T09 `templates`
-id, owner_id FK, name, description, content (json — bölüm/soru/seçenek ağacı; snapshot olduğu için anketlerden bağımsız), visibility (`PRIVATE`, `TEAM` — F2), created_at, updated_at.
+id, owner_id FK, name, description, content (json — soru/seçenek ağacı; snapshot olduğu için anketlerden bağımsız), visibility (`PRIVATE`, `TEAM` — F2), created_at, updated_at.
 
 #### T10 `participants`
 id, email UNIQUE (normalize), full_name NULL, created_at, anonymized_at NULL (KVKK silme talebi — NFR-06).
@@ -154,7 +151,7 @@ id, survey_id FK, file_name, status (`VALIDATED`, `CONFIRMED`, `CANCELLED`), tot
 > Token geçerliliği ayrı kolonda tutulmaz; `surveys.ends_at`’ten türetilir. Böylece süre uzatmada (FR-51) tüm tokenlar kendiliğinden güncellenir.
 
 #### T13 `response_drafts`
-invitation_id PK/FK, answers (json), current_section_id NULL, started_at, updated_at.
+invitation_id PK/FK, answers (json), current_question_id NULL, started_at, updated_at.
 
 > **Tasarım kararı (BR-06 / Q-03):** Ara kayıt davete bağlı olmak zorunda (kaldığı yerden devam). Anonim modda yanıt ile kimlik arasında ilişki kalmaması için gönderimde taslak `responses`/`answers`’a kopyalanır ve taslak **silinir**; anonim modda `responses.invitation_id` boş kalır.
 
@@ -190,7 +187,7 @@ key PK, value (json), updated_by, updated_at. Örnek anahtarlar: `mail.provider`
 ### 1.3 İlişkiler
 
 ```
-users 1─N surveys 1─N survey_sections 1─N questions 1─N question_options
+users 1─N surveys 1─N questions 1─N question_options
 users 1─N templates
 surveys 1─N invitations N─1 participants
 invitations 1─0..1 response_drafts
@@ -229,30 +226,23 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 ### 2.3 Anketler (S-02, S-03)
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
-| API-20 | GET | `/surveys` | Liste: arama, durum filtresi, sıralama, sayfalama; katılımcı sayısı ve yanıt oranı | FR-10, BR-09 |
-| API-21 | POST | `/surveys` | Boş veya `templateId` ile anket oluştur | FR-12, FR-20 |
-| API-22 | GET | `/surveys/{surveyId}` | Anket + bölüm + soru + seçenek ağacı; izinli aksiyonlar | FR-11 |
-| API-23 | PATCH | `/surveys/{surveyId}` | Başlık, açıklama, bitiş, yanıt modu, hatırlatma ayarı | FR-20, FR-27, BR-05 |
-| API-24 | DELETE | `/surveys/{surveyId}` | Sil (yanıtı varsa 409) | BR-08 |
+| API-20 | GET | `/admin/surveys` | Liste: arama, durum filtresi, sıralama, sayfalama; soru sayısı | FR-10, BR-09 |
+| API-21 | POST | `/admin/surveys` | **Kaydet (upsert)**: `id` yoksa oluştur, varsa güncelle; sorular ve seçenekler gövdede | FR-12, FR-20, FR-27, BR-04, BR-05 |
+| API-22 | GET | `/admin/surveys/{surveyId}` | Anket + soru + seçenek ağacı; izinli aksiyonlar | FR-11 |
+| API-24 | DELETE | `/admin/surveys/{surveyId}` | Sil (yalnızca DRAFT) | BR-08 |
 | API-25 | POST | `/surveys/{surveyId}/duplicate` | Kopyala (katılımcı/yanıt hariç) | FR-11 |
-| API-26 | POST | `/surveys/{surveyId}/publish` | Yayınla ve davetleri gönder (“Gönder”) → dispatch özeti | FR-42, S-06 |
+| API-26 | POST | `/admin/surveys/{surveyId}/publish` | Yayınla: `USER` rolündeki seçili kullanıcıları ankete ekle, davetleri gönder (yeniden tasarlanacak) | FR-42, S-06 |
 | API-27 | POST | `/surveys/{surveyId}/close` | Manuel kapat | 3.2 |
 | API-28 | POST | `/surveys/{surveyId}/archive` | Arşivle | 3.2 |
 | API-29 | POST | `/surveys/{surveyId}/unarchive` | Geri al | 3.2 |
 | API-30 | PUT | `/surveys/{surveyId}/deadline` | Bitiş uzat; ops. bilgilendirme e-postası; EXPIRED → PUBLISHED | FR-51, AS-04 |
 | API-31 | GET | `/surveys/{surveyId}/preview` | Katılımcı formatında önizleme (yanıt kaydedilmez) | FR-26 |
 
-### 2.4 Bölümler ve Sorular (S-03, S-04)
+### 2.4 Sorular (S-03, S-04)
+Sorular ve seçenekler ayrı uçlarla değil, anket kaydetme ucuyla (API-21) yönetilir: ekleme, silme, düzenleme ve sıralama tek istekte yapılır.
+
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
-| API-40 | POST | `/surveys/{surveyId}/sections` | Bölüm ekle | FR-21 |
-| API-41 | PATCH | `/surveys/{surveyId}/sections/{sectionId}` | Bölüm adı/açıklaması | FR-21 |
-| API-42 | DELETE | `/surveys/{surveyId}/sections/{sectionId}` | Bölüm sil (soruları ile, onaylı) | FR-23 |
-| API-43 | POST | `/surveys/{surveyId}/sections/{sectionId}/questions` | Soru ekle (seçenekler gövdede) | FR-22, FR-25 |
-| API-44 | PATCH | `/surveys/{surveyId}/questions/{questionId}` | Soru düzenle; yayındaysa yalnız metin | FR-23, BR-04 |
-| API-45 | DELETE | `/surveys/{surveyId}/questions/{questionId}` | Soru sil | FR-23, BR-04 |
-| API-46 | POST | `/surveys/{surveyId}/questions/{questionId}/duplicate` | Soru kopyala | FR-23 |
-| API-47 | PUT | `/surveys/{surveyId}/structure/order` | Sürükle-bırak sonrası bölüm ve soru sırası (bölümler arası taşıma dahil) | FR-24 |
 | API-48 | GET | `/question-types` | Desteklenen tipler ve ayar şemaları (strateji/eklenti) | NFR-20 |
 
 ### 2.5 Şablonlar
@@ -287,7 +277,7 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 ### 2.8 Katılımcı Formu — Public (S-08, S-09, S-10)
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
-| API-80 | GET | `/public/surveys/{token}` | Token doğrula; form + taslak yanıtlar + kaldığı bölüm. Hata: geçersiz/iptal, süresi doldu, zaten yanıtlandı | FR-60, FR-65, AS-01–03 |
+| API-80 | GET | `/public/surveys/{token}` | Token doğrula; form + taslak yanıtlar + kaldığı soru. Hata: geçersiz/iptal, süresi doldu, zaten yanıtlandı | FR-60, FR-65, AS-01–03 |
 | API-81 | PUT | `/public/surveys/{token}/draft` | Ara kayıt (sayfa geçişinde) | FR-63, AS-02 |
 | API-82 | POST | `/public/surveys/{token}/submit` | Zorunlu alan kontrolü, yanıtı kesinleştir, tokenı tüket | FR-62, FR-64, BR-01–03 |
 
@@ -295,7 +285,7 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
 | API-90 | GET | `/surveys/{surveyId}/report/summary` | Davet, yanıt, katılım oranı, ort. skor, ort. süre | FR-70, BR-10 |
-| API-91 | GET | `/surveys/{surveyId}/report/questions` | Soru bazlı dağılım (`?sectionId=`); eşik altıysa kırılım yok | FR-71, FR-75, BR-07 |
+| API-91 | GET | `/surveys/{surveyId}/report/questions` | Soru bazlı dağılım; eşik altıysa kırılım yok | FR-71, BR-07 |
 | API-92 | GET | `/surveys/{surveyId}/report/questions/{questionId}/text-answers` | Serbest metin yanıtları, arama + sayfalama | FR-72 |
 | API-93 | GET | `/surveys/{surveyId}/report/responses` + `/{responseId}` | Katılımcı bazlı yanıtlar (yalnız IDENTIFIED) | FR-74 |
 | API-94 | POST | `/surveys/{surveyId}/exports` | CSV/PDF dışa aktarım başlat (küçükse hazır, büyükse 202) | FR-73, NFR-13 |
@@ -327,5 +317,5 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 2. **Token geçerliliği `surveys.ends_at`’ten türetilir**: Uzatma tek güncellemeyle tüm tokenlara yansır (FR-51).
 3. **Katılımcı global, davet anket bazlı**: Tekrar kontrolü `(survey_id, participant_id)` üzerinden yapılır.
 4. **CSV içe aktarım iki adımlı** (yükle → onayla): AS-05’teki “onaylar” adımı.
-5. **Sıralama tek uçta** (API-47): Sürükle-bırakta tek istekle tutarlı sıra.
+5. **Anket içeriği tek uçta** (API-21, upsert): Soru/seçenek ekleme, silme ve sıralama tek kaydetme isteğiyle yapılır; bölüm yoktur.
 6. **SignUp ucu yok**: Admin’i Sistem Yöneticisi açıyor (API-11); SSO F3’te (Q-01).

@@ -72,9 +72,9 @@ com.definex.survey
 ├─ config/      @ConfigurationProperties (JWT, Auth, CORS), CORS ve Clock bean'leri, OpenAPI
 ├─ security/    SecurityFilterChain, JWT encoder/decoder, JwtTokenService, Roles, 401/403 handler'ları
 ├─ exception/   GlobalExceptionHandler, ProblemDetailFactory, ApiException ve alt sınıfları
-├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt)
+├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
 ├─ auth/        /admin/auth/*, /user/auth/*
-├─ survey/      /admin/surveys/*
+├─ survey/      /admin/surveys/* (anket → sorular → seçenekler; kaydetme upsert)
 ├─ report/      /admin/surveys/{surveyId}/report*
 └─ user/        katılımcı tarafı: /user/surveys/* (form, ara kayıt, yanıt gönderimi)
 ```
@@ -163,6 +163,47 @@ curl -s -X POST http://localhost:8080/api/v1/admin/auth/refresh \
 # 4. Logout → 204
 curl -i -X POST http://localhost:8080/api/v1/admin/auth/logout -H "Authorization: Bearer <accessToken>"
 ```
+
+## Örnek istekler (Admin anketler)
+
+Anket yapısı bölümsüzdür: anket → sorular → seçenekler. Oluşturma ve güncelleme tek uçtan yapılır (**upsert**):
+gövdede `id` yoksa yeni taslak oluşur (`201`), varsa güncellenir (`200`). Sorular ve seçenekler için de `id`'li olan
+güncellenir, `id`'siz olan eklenir, listede olmayan silinir; dizi sırası = gösterim sırası. Kaydetmede yalnızca
+`title` zorunludur.
+
+```bash
+# 1. İlk kayıt (id yok) → 201; yanıtta anket, soru ve seçenek id'leri döner
+curl -s -X POST http://localhost:8080/api/v1/admin/surveys \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"title":"2026 Q4 Çalışan Memnuniyeti","responseMode":"ANONYMOUS",
+       "questions":[{"text":"Şirketimizde çalışmaktan memnunum.","type":"LIKERT","required":true},
+                    {"text":"Hangi yan hakları kullanıyorsunuz?","type":"MULTIPLE_CHOICE",
+                     "options":[{"label":"Özel sağlık sigortası"}]}]}'
+
+# 2. Sonraki kayıt (id'ler geri gönderilir) → 200
+#    Likert sorusu listede olmadığı için silinir, yeni seçenek eklenir.
+curl -s -X POST http://localhost:8080/api/v1/admin/surveys \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"id":"<surveyId>","title":"2026 Q4 Çalışan Memnuniyeti","responseMode":"ANONYMOUS",
+       "endsAt":"2026-11-30T21:00:00Z",
+       "questions":[{"id":"<questionId>","text":"Hangi yan hakları kullanıyorsunuz?","type":"MULTIPLE_CHOICE",
+                     "options":[{"id":"<optionId>","label":"Özel sağlık sigortası"},{"label":"Yemek kartı"}]}]}'
+
+# 3. Liste, detay, silme (yalnızca DRAFT)
+curl -s "http://localhost:8080/api/v1/admin/surveys?status=DRAFT&sort=-updatedAt&page=1&size=20" \
+  -H "Authorization: Bearer <accessToken>"
+curl -s http://localhost:8080/api/v1/admin/surveys/<surveyId> -H "Authorization: Bearer <accessToken>"
+curl -i -X DELETE http://localhost:8080/api/v1/admin/surveys/<surveyId> -H "Authorization: Bearer <accessToken>"
+```
+
+| Durum | HTTP | `code` |
+|---|---|---|
+| Anket yok veya başka admin'e ait | 404 | `SURVEY_NOT_FOUND` |
+| `settings` tipe uymuyor / bilinmeyen alan | 400 | `VALIDATION_ERROR` |
+| Tekrarlanan veya bu ankete ait olmayan id; seçimli olmayan tipe seçenek | 422 | `INVALID_STRUCTURE` |
+| Yayındaki ankette metin dışı değişiklik | 409 | `SURVEY_STRUCTURE_LOCKED` |
+| Süresi dolmuş / kapalı / arşivli anketi kaydetme | 409 | `SURVEY_NOT_EDITABLE` |
+| Taslak olmayan anketi silme | 409 | `SURVEY_NOT_DELETABLE` |
 
 ## Hata yanıtı örnekleri
 
