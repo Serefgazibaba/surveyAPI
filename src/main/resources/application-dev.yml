@@ -1,0 +1,15 @@
+# Yerel geliştirme profili (varsayılan).
+spring:
+  jpa:
+    hibernate:
+      # Migration aracı olmadığı için şema entity'lerden üretilir. Yalnızca geliştirme içindir.
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.definex.survey: DEBUG
+    org.springframework.security: INFO

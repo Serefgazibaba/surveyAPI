@@ -1,0 +1,41 @@
+# Yerel geliştirme ortamı: PostgreSQL + API.
+#   Hepsi:          docker compose up --build
+#   Yalnızca DB:    docker compose up -d postgres   (API'yi IDE / mvnw ile çalıştırmak için)
+# Değerler aynı klasördeki .env dosyasından okunur (.env.example'ı kopyalayın).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: survey-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-survey}
+      POSTGRES_USER: ${DB_USERNAME:-survey}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD .env dosyasında tanımlanmalı}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - survey-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    container_name: survey-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-survey}
+      DB_USERNAME: ${DB_USERNAME:-survey}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET .env dosyasında tanımlanmalı}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+
+volumes:
+  survey-pgdata:
