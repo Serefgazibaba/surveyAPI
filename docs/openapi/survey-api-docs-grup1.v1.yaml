@@ -149,15 +149,12 @@ paths:
       tags: [Admin - Auth]
       operationId: adminLogout
       summary: Admin çıkışı
-      description: Mevcut oturumu ve ona bağlı refresh token'ı iptal eder. İdempotenttir.
+      description: |
+        Access token'daki `sid` ile bağlı olduğu oturumu ve o oturumun refresh token'ını iptal eder.
+        Gövde almaz. İdempotenttir; oturum zaten kapalıysa da `204` döner.
+        Access token kalan ömrü boyunca (en fazla 15 dk) geçerli kalır; istemci token'ları silmelidir.
       security:
         - adminAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LogoutRequest'
       responses:
         '204':
           description: Oturum sonlandırıldı
@@ -1082,12 +1079,6 @@ components:
           format: password
           minLength: 1
           maxLength: 128
-    LogoutRequest:
-      type: object
-      properties:
-        refreshToken:
-          type: string
-          description: Verilirse bu refresh token da iptal edilir
     AdminAuthTokenResponse:
       description: Admin refresh token ömrü hareketsizlik süresine (30 dk) eşittir ve her yenilemede baştan başlar (FR-02)
       allOf:

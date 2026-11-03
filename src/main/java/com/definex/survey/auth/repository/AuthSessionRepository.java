@@ -27,6 +27,4 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, UUID> 
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
     @Query("select s from AuthSession s where s.previousRefreshTokenHash = :hash")
     Optional<AuthSession> findForUpdateByPreviousRefreshTokenHash(@Param("hash") String refreshTokenHash);
-
-    Optional<AuthSession> findByRefreshTokenHash(String refreshTokenHash);
 }

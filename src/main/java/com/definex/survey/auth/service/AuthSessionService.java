@@ -80,14 +80,6 @@ public class AuthSessionService {
         repository.findById(sessionId).ifPresent(session -> session.revoke(reason, now));
     }
 
-    /** Gövdede gelen refresh token aynı kullanıcıya aitse o oturumu da iptal eder. */
-    @Transactional
-    public void revokeByRefreshToken(String rawRefreshToken, UUID userId, RevokeReason reason, Instant now) {
-        repository.findByRefreshTokenHash(tokenGenerator.hash(rawRefreshToken))
-                .filter(session -> session.getUser().getId().equals(userId))
-                .ifPresent(session -> session.revoke(reason, now));
-    }
-
     /**
      * Refresh token'ın kalan geçerlilik süresi (saniye): hareketsizlik penceresi ile mutlak ömürden kısa olanı.
      */

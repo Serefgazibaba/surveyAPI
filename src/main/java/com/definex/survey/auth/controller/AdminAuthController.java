@@ -2,7 +2,6 @@ package com.definex.survey.auth.controller;
 
 import com.definex.survey.auth.dto.AdminAuthTokenResponse;
 import com.definex.survey.auth.dto.AdminLoginRequest;
-import com.definex.survey.auth.dto.LogoutRequest;
 import com.definex.survey.auth.dto.RefreshTokenRequest;
 import com.definex.survey.auth.service.AdminAuthService;
 import com.definex.survey.auth.service.ClientInfo;
@@ -49,14 +48,13 @@ public class AdminAuthController {
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "Admin çıkışı", description = "Mevcut oturumu iptal eder. İdempotenttir.")
-    public ResponseEntity<Void> logout(@AuthenticationPrincipal Jwt jwt,
-                                       @Valid @RequestBody(required = false) LogoutRequest request) {
+    @Operation(summary = "Admin çıkışı",
+            description = "Access token'ın bağlı olduğu oturumu ve refresh token'ını iptal eder. Gövde almaz. İdempotenttir.")
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal Jwt jwt) {
         String sessionId = jwt.getClaimAsString(AdminAuthService.SESSION_CLAIM);
-        adminAuthService.logout(
-                sessionId == null ? null : UUID.fromString(sessionId),
-                UUID.fromString(jwt.getSubject()),
-                request == null ? null : request.refreshToken());
+        if (sessionId != null) {
+            adminAuthService.logout(UUID.fromString(sessionId));
+        }
         return ResponseEntity.noContent().build();
     }
 

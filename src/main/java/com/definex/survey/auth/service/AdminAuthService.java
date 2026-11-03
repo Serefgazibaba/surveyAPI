@@ -105,16 +105,10 @@ public class AdminAuthService {
         return toResponse(issued, now);
     }
 
-    /** İdempotent: oturum zaten kapalıysa da başarılı döner. */
+    /** Oturumu ve refresh token'ını iptal eder. İdempotent: oturum zaten kapalıysa da başarılı döner. */
     @Transactional
-    public void logout(UUID sessionId, UUID userId, String refreshToken) {
-        Instant now = clock.instant();
-        if (sessionId != null) {
-            sessionService.revoke(sessionId, RevokeReason.LOGOUT, now);
-        }
-        if (refreshToken != null && !refreshToken.isBlank()) {
-            sessionService.revokeByRefreshToken(refreshToken, userId, RevokeReason.LOGOUT, now);
-        }
+    public void logout(UUID sessionId) {
+        sessionService.revoke(sessionId, RevokeReason.LOGOUT, clock.instant());
     }
 
     private AdminAuthTokenResponse toResponse(IssuedSession issued, Instant now) {
