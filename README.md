@@ -5,7 +5,7 @@ davet linkiyle anketi doldurur. API sözleşmesi: [`docs/openapi/survey-api-docs
 
 ## Teknoloji
 
-Java 21 · Spring Boot 3.5 · Maven (wrapper) · Spring Web, Validation, Data JPA, Security (OAuth2 Resource Server / JWT) · PostgreSQL 16
+Java 21 · Spring Boot 3.5 · Maven (wrapper) · Spring Web, Validation, Data JPA, Security (OAuth2 Resource Server / JWT) · PostgreSQL 16 · springdoc-openapi (Swagger UI, yalnızca dev)
 
 ## Hızlı başlangıç (tek komut)
 
@@ -24,6 +24,17 @@ PostgreSQL ve API birlikte ayağa kalkar. API adresi: `http://localhost:8080/api
 | `docker compose up -d postgres` | Yalnızca DB (API'yi IDE'den çalıştırmak için) |
 | `docker compose down` | Durdurur (veri korunur) |
 | `docker compose down -v` | Durdurur ve DB verisini siler |
+
+## Swagger UI (yalnızca dev)
+
+Uygulama `dev` profiliyle çalışırken (docker compose ve yerel çalıştırmada varsayılan) Swagger UI açıktır:
+
+- Swagger UI: http://localhost:8080/api/v1/swagger-ui.html
+- OpenAPI JSON: http://localhost:8080/api/v1/v3/api-docs
+
+Korumalı uçları denemek için önce login ucundan access token alın, ardından sağ üstteki **Authorize** butonuna token'ı
+girin (`Bearer` yazmadan). Doküman koddaki controller'lardan üretilir; sözleşmenin asıl kaynağı
+`docs/openapi/` altındaki YAML'dır. `dev` dışındaki profillerde Swagger UI ve `/v3/api-docs` kapalıdır.
 
 ## IDE / komut satırından çalıştırma
 

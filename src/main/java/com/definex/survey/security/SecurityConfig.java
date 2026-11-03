@@ -1,5 +1,6 @@
 package com.definex.survey.security;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -31,11 +32,23 @@ public class SecurityConfig {
             "/user/auth/refresh"
     };
 
+    /** Swagger UI ve OpenAPI dokümanı; yalnızca {@code springdoc.api-docs.enabled=true} iken (dev) açılır. */
+    private static final String[] API_DOCS_ENDPOINTS = {
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html"
+    };
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http,
                                             JwtAuthenticationConverter jwtAuthenticationConverter,
                                             ProblemAuthenticationEntryPoint authenticationEntryPoint,
-                                            ProblemAccessDeniedHandler accessDeniedHandler) throws Exception {
+                                            ProblemAccessDeniedHandler accessDeniedHandler,
+                                            @Value("${springdoc.api-docs.enabled:false}") boolean apiDocsEnabled)
+            throws Exception {
+        if (apiDocsEnabled) {
+            http.authorizeHttpRequests(auth -> auth.requestMatchers(API_DOCS_ENDPOINTS).permitAll());
+        }
         http
                 // CSRF koruması kapalı: API stateless ve kimlik bilgisi cookie ile değil Authorization: Bearer
                 // başlığıyla taşınıyor. Tarayıcı bu başlığı başka bir siteden gelen isteğe kendiliğinden eklemediği

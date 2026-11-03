@@ -9,6 +9,16 @@ spring:
       hibernate:
         format_sql: true
 
+# Swagger UI: http://localhost:8080/api/v1/swagger-ui.html
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    persist-authorization: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+
 logging:
   level:
     com.definex.survey: DEBUG

@@ -28,6 +28,13 @@ server:
     include-stacktrace: never
     include-message: never
 
+# Swagger UI varsayılan olarak kapalı; dev profilinde açılır.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 app:
   security:
     jwt:
