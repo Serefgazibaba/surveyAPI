@@ -1,6 +1,8 @@
 # Yerel geliştirme profili (varsayılan).
 spring:
   jpa:
+    # Seed SQL, Hibernate tabloları oluşturduktan sonra çalışsın
+    defer-datasource-initialization: true
     hibernate:
       # Migration aracı olmadığı için şema entity'lerden üretilir. Yalnızca geliştirme içindir.
       ddl-auto: update
@@ -8,6 +10,12 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  # Dev seed kullanıcıları (db/seed/dev-users.sql); her açılışta çalışır, tekrar eklemez.
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:db/seed/dev-users.sql
+      encoding: UTF-8
 
 # Swagger UI: http://localhost:8080/api/v1/swagger-ui.html
 springdoc:

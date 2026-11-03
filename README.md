@@ -59,6 +59,9 @@ IntelliJ'de çalıştırırken Run Configuration → Environment variables alan�
 | `CORS_ALLOWED_ORIGINS` | | `http://localhost:3000` | Virgülle ayrılmış izinli origin'ler |
 | `SERVER_PORT` | | `8080` | HTTP portu |
 | `DB_NAME`, `DB_PORT` | | `survey`, `5432` | Yalnızca docker-compose için |
+| `AUTH_SESSION_IDLE_TIMEOUT` | | `30m` | Son refresh'ten sonra oturumun düşeceği süre (FR-02) |
+| `AUTH_MAX_FAILED_ATTEMPTS_PER_IP` | | `5` | Aynı e-posta + IP için kilit eşiği (FR-01) |
+| `AUTH_MAX_FAILED_ATTEMPTS_PER_ACCOUNT` | | `20` | Bir e-posta için tüm IP'lerden toplam kilit eşiği |
 
 Gizli bilgiler koda veya `application*.yml` dosyalarına yazılmaz. `.env` git'e eklenmez.
 
@@ -66,10 +69,10 @@ Gizli bilgiler koda veya `application*.yml` dosyalarına yazılmaz. `.env` git'e
 
 ```
 com.definex.survey
-├─ config/      @ConfigurationProperties (JWT, CORS), CORS bean'i
+├─ config/      @ConfigurationProperties (JWT, Auth, CORS), CORS ve Clock bean'leri, OpenAPI
 ├─ security/    SecurityFilterChain, JWT encoder/decoder, JwtTokenService, Roles, 401/403 handler'ları
 ├─ exception/   GlobalExceptionHandler, ProblemDetailFactory, ApiException ve alt sınıfları
-├─ common/      modüllerden bağımsız yardımcılar
+├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt)
 ├─ auth/        /admin/auth/*, /user/auth/*
 ├─ survey/      /admin/surveys/*
 ├─ report/      /admin/surveys/{surveyId}/report*
@@ -108,9 +111,58 @@ Her iş modülü aynı alt paketleri taşır: `controller/ service/ repository/ 
 
 **Güvenlik**
 - Roller: `ADMIN` (`/admin/**`), `USER` (`/user/**`). JWT'de `roles` claim'i içinde taşınır.
-- Token üretimi için `JwtTokenService.issueAccessToken(...)` kullanılır. Access token 15 dk, refresh token 7 gün.
+- Token üretimi için `JwtTokenService.issueAccessToken(...)` kullanılır. Access token 15 dk.
+- Refresh token tek kullanımlıktır (rotation). Oturum son refresh'ten 30 dk sonra veya en geç 7 günde düşer.
 - Şifreler `PasswordEncoder` (BCrypt) bean'i ile hash'lenir.
 - Ek yetki kuralı gerekiyorsa `@PreAuthorize("hasRole('ADMIN')")` kullanın.
+
+## Dev seed kullanıcıları
+
+`dev` profilinde uygulama her açılışta `src/main/resources/db/seed/dev-users.sql` dosyasını çalıştırır
+(var olan e-postaları atlar). Şifreler BCrypt ile hash'lenmiştir; aşağıdaki değerler yalnızca yerel geliştirme içindir.
+
+| E-posta | Rol | Şifre |
+|---|---|---|
+| `ayse.yilmaz@definex.com` | ADMIN | `Admin123!` |
+| `mehmet.demir@definex.com` | ADMIN | `Admin123!` |
+| `zeynep.kaya@definex.com` | USER | `User123!` |
+| `can.ozturk@definex.com` | USER | `User123!` |
+| `elif.sahin@definex.com` | USER | `User123!` |
+
+`USER` rolündeki hesaplar admin girişinde `401 INVALID_CREDENTIALS` alır.
+
+## Örnek istekler (Admin auth)
+
+```bash
+# 1. Login → accessToken + refreshToken
+curl -s -X POST http://localhost:8080/api/v1/admin/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ayse.yilmaz@definex.com","password":"Admin123!"}'
+```
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "refreshToken": "q7Zx0bR3kN9vYpL2mT6sWc1eHfJ4uAaD8gKiOn5rXyQ",
+  "refreshExpiresIn": 1800,
+  "user": { "id": "0a1b2c3d-0000-4000-8000-000000000001", "fullName": "Ayşe Yılmaz",
+            "email": "ayse.yilmaz@definex.com", "role": "ADMIN" }
+}
+```
+
+```bash
+# 2. Korumalı uç (access token ile)
+curl -i http://localhost:8080/api/v1/admin/surveys -H "Authorization: Bearer <accessToken>"
+
+# 3. Refresh → yeni token çifti (eski refresh token artık geçersiz; tekrar kullanılırsa oturum iptal edilir)
+curl -s -X POST http://localhost:8080/api/v1/admin/auth/refresh \
+  -H "Content-Type: application/json" -d '{"refreshToken":"<refreshToken>"}'
+
+# 4. Logout → 204
+curl -i -X POST http://localhost:8080/api/v1/admin/auth/logout -H "Authorization: Bearer <accessToken>"
+```
 
 ## Hata yanıtı örnekleri
 
@@ -129,4 +181,9 @@ curl -i http://localhost:8080/api/v1/admin/surveys
 }
 ```
 
-Login → korumalı uç akışının `curl` örnekleri, auth uçları yazıldığında bu bölüme eklenecek.
+| Durum | HTTP | `code` |
+|---|---|---|
+| E-posta/şifre hatalı veya hesap admin değil | 401 | `INVALID_CREDENTIALS` |
+| Çok sayıda hatalı deneme (`Retry-After` başlığıyla) | 423 | `ACCOUNT_LOCKED` |
+| Refresh token geçersiz, kullanılmış, oturum boşta kaldı veya süresi doldu | 401 | `SESSION_EXPIRED` |
+| Alan doğrulaması (`errors[]` alan bazında) | 400 | `VALIDATION_ERROR` |

@@ -13,8 +13,9 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 
 | #   | Tablo                     | Amaç                                                                 | Kapsam | İlgili gereksinim         |
 |-----|---------------------------|----------------------------------------------------------------------|--------|---------------------------|
-| T01 | `users`                   | Admin / Sistem Yöneticisi hesapları                                  | MVP    | FR-01, Q-01               |
+| T01 | `users`                   | Admin ve katılımcı (USER) hesapları                                  | MVP    | FR-01, Q-01               |
 | T02 | `auth_sessions`           | Oturum / refresh token kayıtları, hareketsizlik takibi               | MVP    | FR-02                     |
+| T02b| `login_attempts`          | (e-posta, IP) bazlı hatalı giriş sayacı ve kilit                     | MVP    | FR-01                     |
 | T03 | `password_reset_tokens`   | Süreli şifre sıfırlama linkleri                                      | MVP    | FR-03                     |
 | T04 | `surveys`                 | Anket ana kaydı ve yaşam döngüsü durumu                              | MVP    | FR-10–12, FR-20, FR-50–52 |
 | T05 | `survey_sections`         | Anket bölümleri (formda sayfa)                                       | MVP    | FR-21, FR-24              |
@@ -44,17 +45,44 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 | id | uuid PK | |
 | full_name | string | |
 | email | string UNIQUE | küçük harfe normalize |
-| password_hash | string NULL | bcrypt/Argon2 (NFR-04); SSO kullanıcısında boş |
-| sso_provider / sso_subject | string NULL | F3 / Q-01 kararına bağlı |
-| role | enum | `ADMIN`, `SYSTEM_ADMIN` |
-| status | enum | `ACTIVE`, `LOCKED`, `DISABLED` |
-| failed_login_count | int | 5 hatada kilit (FR-01) |
-| locked_until | timestamp NULL | +15 dk |
-| last_login_at | timestamp NULL | |
+| password_hash | string | BCrypt (NFR-04); salt hash metninin içindedir |
+| sso_provider / sso_subject | string NULL | F3 / Q-01 kararına bağlı (henüz uygulanmadı) |
+| role | enum | `ADMIN`, `USER` |
+| status | enum | `ACTIVE`, `DISABLED` |
 | created_at / updated_at | timestamp | |
 
+Yalnızca kimlik ve hesap bilgisi tutulur. Kilit bilgisi T02b'de tutulur; son giriş zamanı T02'deki son `created_at`'ten hesaplanır.
+
 #### T02 `auth_sessions`
-id, user_id FK, refresh_token_hash, ip, user_agent, last_activity_at (30 dk kuralı), expires_at, revoked_at, created_at.
+| Kolon | Tip | Not |
+|---|---|---|
+| id | uuid PK | JWT'de `sid` claim'i |
+| user_id | uuid FK → users | |
+| ip_address / user_agent | string | |
+| refresh_token_hash | string UNIQUE | geçerli refresh token'ın SHA-256'sı; ham token saklanmaz |
+| previous_refresh_token_hash | string NULL | bir önceki token; tekrar gelirse oturum `TOKEN_REUSE` ile iptal edilir |
+| last_activity_at | timestamp | login ve her refresh'te güncellenir; 30 dk aşılırsa oturum düşer (FR-02) |
+| expires_at | timestamp | created_at + 7 gün (mutlak sınır) |
+| revoked_at / revoke_reason | timestamp NULL / enum NULL | `LOGOUT`, `IDLE_TIMEOUT`, `EXPIRED`, `TOKEN_REUSE`, `ACCOUNT_DISABLED` |
+| created_at / updated_at | timestamp | |
+
+Refresh token için ayrı tablo yoktur; rotation bu satırdaki iki hash kolonuyla yapılır.
+
+#### T02b `login_attempts`
+| Kolon | Tip | Not |
+|---|---|---|
+| id | uuid PK | |
+| email | string | normalize; kullanıcı olmasa da tutulur (hesap varlığı sızmaz) |
+| ip_address | string | UNIQUE (email, ip_address) |
+| failed_count | int | son hata 15 dk'dan eskiyse 1'den başlar |
+| locked_until | timestamp NULL | (e-posta, IP) 5 hatada +15 dk |
+| last_failed_at | timestamp | |
+| created_at / updated_at | timestamp | |
+
+Kilit kuralları (FR-01):
+- Aynı (e-posta, IP) çiftinden 5 hata gelirse yalnızca o IP kilitlenir.
+- Bir e-postaya tüm IP'lerden 15 dk içinde toplam 20 hata gelirse e-posta kilitlenir.
+- Başarılı girişte o (e-posta, IP) satırı silinir.
 
 #### T03 `password_reset_tokens`
 id, user_id FK, token_hash, expires_at, used_at NULL, created_at.

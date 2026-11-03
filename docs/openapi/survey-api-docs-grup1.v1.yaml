@@ -63,7 +63,10 @@ paths:
       description: |
         E-posta ve şifre ile giriş yapar; access ve refresh token döner.
         Hatalı girişte kullanıcının var olup olmadığı belli edilmez (genel hata mesajı).
-        5 başarısız denemede hesap 15 dakika kilitlenir (FR-01).
+        Yalnızca `ADMIN` rolündeki aktif kullanıcılar giriş yapabilir; `USER` rolü de aynı genel hatayı alır.
+        Kilit (FR-01):
+        - Aynı e-posta + IP'den 5 hatalı denemede o IP 15 dakika kilitlenir (`423`).
+        - Bir e-postaya tüm IP'lerden 15 dakika içinde toplam 20 hatalı deneme gelirse e-posta kilitlenir.
       security: []
       requestBody:
         required: true
@@ -121,7 +124,7 @@ paths:
       description: |
         Geçerli refresh token karşılığında yeni bir token çifti döner. Refresh token tek kullanımlıktır (rotation);
         kullanılmış bir token tekrar gelirse ilgili oturum zinciri iptal edilir.
-        30 dakika hareketsizlikte oturum sona erer (FR-02) ve `401` döner.
+        Son refresh'ten bu yana 30 dakika geçtiyse (FR-02) veya oturum 7 günlük mutlak ömrünü doldurduysa `401` döner.
       security: []
       requestBody:
         required: true
@@ -1060,7 +1063,9 @@ components:
           type: string
         refreshExpiresIn:
           type: integer
-          description: Refresh token ömrü (saniye)
+          description: |
+            Refresh token'ın kalan geçerliliği (saniye): hareketsizlik penceresi (30 dk) ile oturumun 7 günlük
+            mutlak ömründen kısa olanı. Her refresh'te baştan başlar.
           example: 1800
 
     # ---------- Admin Auth ----------
@@ -1106,7 +1111,7 @@ components:
           format: email
         role:
           type: string
-          enum: [ADMIN, SYSTEM_ADMIN]
+          enum: [ADMIN]
 
     # ---------- User Auth ----------
     UserLoginRequest:
