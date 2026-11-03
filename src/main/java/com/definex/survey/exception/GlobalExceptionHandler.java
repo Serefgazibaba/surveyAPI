@@ -33,6 +33,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetailFactory.create(ex.getStatus(), ex.getCode(), ex.getMessage(), null, ex.getErrors());
     }
 
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(handleApiException(ex));
+    }
+
     /** {@code @RequestBody @Valid} doğrulama hataları: alan bazında listelenir. */
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
