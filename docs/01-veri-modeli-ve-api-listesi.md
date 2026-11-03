@@ -22,9 +22,7 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 | T07 | `question_options`        | Seçimli soruların seçenekleri                                        | MVP    | FR-22, 4.4                |
 | T08 | `survey_shares`           | Anketin başka Admin’lerle paylaşımı / ortak sahiplik                 | F2     | BR-09, Q-07               |
 | T09 | `templates`               | Yeniden kullanılabilir anket iskeleti                                | MVP    | FR-30–32                  |
-| T10 | `participants`            | Katılımcı kişi kaydı (e-posta, ad)                                   | MVP    | FR-40, NFR-06             |
-| T11 | `participant_imports`     | CSV içe aktarım işi ve satır bazlı hata özeti                        | MVP    | FR-41, AS-05              |
-| T12 | `invitations`             | Katılımcı ↔ anket erişim kaydı, token hash, davet durumu             | MVP    | FR-42–45, 3.3             |
+| T12 | `invitations`             | Kullanıcı (USER) ↔ anket davet kaydı, token hash, davet durumu       | MVP    | FR-42–45, 3.3             |
 | T13 | `response_drafts`         | Gönderim öncesi ara kayıt (davete bağlı)                             | MVP    | FR-63, AS-02, BR-06       |
 | T14 | `responses`               | Kesinleşmiş (gönderilmiş) yanıt                                      | MVP    | BR-01, BR-06              |
 | T15 | `answers`                 | Soru bazlı yanıt değeri                                              | MVP    | FR-71–73                  |
@@ -126,27 +124,23 @@ survey_id FK, user_id FK, role (`CO_OWNER`, `VIEWER`), created_at. PK (survey_id
 #### T09 `templates`
 id, owner_id FK, name, description, content (json — soru/seçenek ağacı; snapshot olduğu için anketlerden bağımsız), visibility (`PRIVATE`, `TEAM` — F2), created_at, updated_at.
 
-#### T10 `participants`
-id, email UNIQUE (normalize), full_name NULL, created_at, anonymized_at NULL (KVKK silme talebi — NFR-06).
-
-> Katılımcı kişi düzeyinde global tutulur; anket bağlantısı `invitations` üzerindendir. Böylece KVKK silme talebi tek kayıttan yürütülür.
-
-#### T11 `participant_imports`
-id, survey_id FK, file_name, status (`VALIDATED`, `CONFIRMED`, `CANCELLED`), total_rows, valid_rows, invalid_rows, duplicate_rows, errors (json: `[{row, value, reason}]`), staged_rows (json — onay bekleyen geçerli satırlar), created_by FK, created_at, confirmed_at.
+> Ayrı bir katılımcı tablosu yoktur: katılımcılar `users` tablosundaki `role = USER` kullanıcılardır (T01). CSV içe aktarım ileride gerekirse `users` üzerinden tasarlanacak.
 
 #### T12 `invitations`
 | Kolon | Tip | Not |
 |---|---|---|
 | id | uuid PK | |
-| survey_id | uuid FK | |
-| participant_id | uuid FK | UNIQUE (survey_id, participant_id) — FR-40 |
-| source | enum | `MANUAL`, `CSV` |
-| token_hash | string UNIQUE | ≥128 bit token, yalnızca hash (NFR-02) |
-| status | enum | `CREATED`, `SENT`, `STARTED`, `COMPLETED`, `EXPIRED`, `CANCELLED`, `FAILED` |
-| sent_at / first_opened_at / last_opened_at / completed_at / cancelled_at | timestamp NULL | |
-| reminder_count | int | |
-| last_reminded_at | timestamp NULL | |
-| created_at | timestamp | |
+| survey_id | uuid FK → surveys | |
+| user_id | uuid | `users.id` (role = USER); modül sınırı nedeniyle JPA ilişkisi yok. UNIQUE (survey_id, user_id) — FR-40 |
+| token_hash | string UNIQUE | davete özel 256 bit token'ın SHA-256'sı; ham token saklanmaz (NFR-02) |
+| status | enum | `PENDING` (oluşturuldu), `STARTED` (giriş yapıldı), `COMPLETED` (yanıt gönderildi), `CANCELLED` |
+| invited_at | timestamp | |
+| completed_at | timestamp NULL | |
+| created_at / updated_at | timestamp | |
+
+E-posta, ad gibi kişisel bilgi tutulmaz; `users` tablosundan okunur. Davet linki `{FRONTEND_BASE_URL}/s/{token}`; ilk adımda şifre istenmez, token kimlik yerine geçer. E-posta gönderimi eklendiğinde `source`, `sent_at`, `reminder_count`, `last_reminded_at` kolonları eklenecek.
+
+Katılımcı erişim kuralları (user auth'ta uygulanacak): bitiş tarihi geçtiyse `410 SURVEY_EXPIRED`, davet `COMPLETED` ise `409 ALREADY_RESPONDED`, token yok veya iptal ise `401 INVALID_INVITATION`.
 
 > Token geçerliliği ayrı kolonda tutulmaz; `surveys.ends_at`’ten türetilir. Böylece süre uzatmada (FR-51) tüm tokenlar kendiliğinden güncellenir.
 
@@ -189,12 +183,12 @@ key PK, value (json), updated_by, updated_at. Örnek anahtarlar: `mail.provider`
 ```
 users 1─N surveys 1─N questions 1─N question_options
 users 1─N templates
-surveys 1─N invitations N─1 participants
+surveys 1─N invitations N─1 users (role = USER)
 invitations 1─0..1 response_drafts
 invitations 1─0..1 responses        (yalnız IDENTIFIED)
 surveys 1─N responses 1─N answers 1─N answer_options N─1 question_options
 surveys 1─N dispatches 1─N email_messages N─0..1 invitations
-surveys 1─N email_templates | participant_imports | export_jobs | survey_shares
+surveys 1─N email_templates | export_jobs | survey_shares
 ```
 
 ---
@@ -231,7 +225,8 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 | API-22 | GET | `/admin/surveys/{surveyId}` | Anket + soru + seçenek ağacı; izinli aksiyonlar | FR-11 |
 | API-24 | DELETE | `/admin/surveys/{surveyId}` | Sil (yalnızca DRAFT) | BR-08 |
 | API-25 | POST | `/surveys/{surveyId}/duplicate` | Kopyala (katılımcı/yanıt hariç) | FR-11 |
-| API-26 | POST | `/admin/surveys/{surveyId}/publish` | Yayınla: `USER` rolündeki seçili kullanıcıları ankete ekle, davetleri gönder (yeniden tasarlanacak) | FR-42, S-06 |
+| API-25a | GET | `/admin/getUsers` | Davet edilebilecek kullanıcılar (USER, aktif); arama + sayfalama | FR-40 |
+| API-26 | POST | `/admin/publishSurvey` | Yayınla: `{surveyId, userIds[]}` → tamlık kontrolü, davet oluştur, DRAFT → PUBLISHED; e-posta henüz yok, linkler yanıtta | FR-42, FR-22, FR-20 |
 | API-27 | POST | `/surveys/{surveyId}/close` | Manuel kapat | 3.2 |
 | API-28 | POST | `/surveys/{surveyId}/archive` | Arşivle | 3.2 |
 | API-29 | POST | `/surveys/{surveyId}/unarchive` | Geri al | 3.2 |
@@ -255,6 +250,8 @@ Sorular ve seçenekler ayrı uçlarla değil, anket kaydetme ucuyla (API-21) yö
 | API-54 | DELETE | `/templates/{templateId}` | Sil (türetilmiş anketler etkilenmez) | FR-31 |
 
 ### 2.6 Katılımcılar ve Davetler (S-05)
+Katılımcı seçimi ve davet oluşturma API-25a ve API-26 ile yapılır. Aşağıdaki uçlar ileride ele alınacak.
+
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
 | API-60 | GET | `/surveys/{surveyId}/participants` | Katılımcı + davet durumu listesi (anonimde yalnız tamamlanma) | FR-45 |
@@ -315,7 +312,7 @@ Sorular ve seçenekler ayrı uçlarla değil, anket kaydetme ucuyla (API-21) yö
 ## 3. Bu dokümanda alınan, onay bekleyen kararlar
 1. **Ara kayıt ayrı tabloda (`response_drafts`)**: Anonim modda gönderimde davetle bağ koparılır (BR-06, Q-03).
 2. **Token geçerliliği `surveys.ends_at`’ten türetilir**: Uzatma tek güncellemeyle tüm tokenlara yansır (FR-51).
-3. **Katılımcı global, davet anket bazlı**: Tekrar kontrolü `(survey_id, participant_id)` üzerinden yapılır.
+3. **Katılımcı = `users` (role USER), davet anket bazlı**: Tekrar kontrolü `(survey_id, user_id)` üzerinden yapılır.
 4. **CSV içe aktarım iki adımlı** (yükle → onayla): AS-05’teki “onaylar” adımı.
 5. **Anket içeriği tek uçta** (API-21, upsert): Soru/seçenek ekleme, silme ve sıralama tek kaydetme isteğiyle yapılır; bölüm yoktur.
 6. **SignUp ucu yok**: Admin’i Sistem Yöneticisi açıyor (API-11); SSO F3’te (Q-01).

@@ -2,10 +2,13 @@ package com.definex.survey.survey.controller;
 
 import com.definex.survey.exception.ApiException;
 import com.definex.survey.exception.FieldErrorItem;
+import com.definex.survey.survey.dto.PublishSurveyRequest;
+import com.definex.survey.survey.dto.PublishSurveyResponse;
 import com.definex.survey.survey.dto.SurveyDetailResponse;
 import com.definex.survey.survey.dto.SurveyListResponse;
 import com.definex.survey.survey.dto.SurveySaveRequest;
 import com.definex.survey.survey.entity.SurveyStatus;
+import com.definex.survey.survey.service.SurveyPublishService;
 import com.definex.survey.survey.service.SurveyService;
 import com.definex.survey.survey.service.SurveyService.SaveResult;
 import com.definex.survey.survey.service.SurveyService.SurveySort;
@@ -42,9 +45,11 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class AdminSurveyController {
 
     private final SurveyService surveyService;
+    private final SurveyPublishService surveyPublishService;
 
-    public AdminSurveyController(SurveyService surveyService) {
+    public AdminSurveyController(SurveyService surveyService, SurveyPublishService surveyPublishService) {
         this.surveyService = surveyService;
+        this.surveyPublishService = surveyPublishService;
     }
 
     @GetMapping("/surveys")
@@ -77,6 +82,17 @@ public class AdminSurveyController {
         URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/admin/surveys/{id}").buildAndExpand(result.survey().id()).toUri();
         return ResponseEntity.created(location).body(result.survey());
+    }
+
+    @PostMapping("/publishSurvey")
+    @Operation(operationId = "adminPublishSurvey", summary = "Anketi yayınla",
+            description = """
+                    Seçilen katılımcılar (GET /admin/getUsers) için davet oluşturur ve anketi DRAFT → PUBLISHED yapar.
+                    Önce tamlık kuralları kontrol edilir; eksikler 422 SURVEY_INCOMPLETE ile tek seferde döner.
+                    E-posta henüz gönderilmez: davete özel linkler yanıtta döner (geçici).""")
+    public PublishSurveyResponse publish(@AuthenticationPrincipal Jwt jwt,
+                                         @Valid @RequestBody PublishSurveyRequest request) {
+        return surveyPublishService.publish(ownerId(jwt), request);
     }
 
     @GetMapping("/surveys/{surveyId}")

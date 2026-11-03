@@ -15,6 +15,7 @@ public record SurveyDetailResponse(
         ResponseMode responseMode,
         Instant endsAt,
         Instant publishedAt,
+        long participantCount,
         List<SurveyAction> allowedActions,
         Instant createdAt,
         Instant updatedAt,

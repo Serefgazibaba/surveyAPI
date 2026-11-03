@@ -8,10 +8,12 @@ import com.definex.survey.survey.dto.SurveyListResponse;
 import com.definex.survey.survey.dto.SurveySaveRequest;
 import com.definex.survey.survey.entity.Survey;
 import com.definex.survey.survey.entity.SurveyStatus;
-import com.definex.survey.survey.repository.SurveyQuestionCount;
+import com.definex.survey.survey.repository.InvitationRepository;
+import com.definex.survey.survey.repository.SurveyCount;
 import com.definex.survey.survey.repository.SurveyRepository;
 import com.definex.survey.survey.repository.SurveySpecifications;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -30,10 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class SurveyService {
 
     private final SurveyRepository surveyRepository;
+    private final InvitationRepository invitationRepository;
     private final SurveyContentMerger contentMerger;
 
-    public SurveyService(SurveyRepository surveyRepository, SurveyContentMerger contentMerger) {
+    public SurveyService(SurveyRepository surveyRepository, InvitationRepository invitationRepository,
+                         SurveyContentMerger contentMerger) {
         this.surveyRepository = surveyRepository;
+        this.invitationRepository = invitationRepository;
         this.contentMerger = contentMerger;
     }
 
@@ -45,18 +50,21 @@ public class SurveyService {
                 .and(SurveySpecifications.titleContains(q));
         Page<Survey> result = surveyRepository.findAll(spec, PageRequest.of(page - 1, size, sort.toSort()));
 
-        Map<UUID, Long> counts = result.isEmpty() ? Map.of()
-                : surveyRepository.countQuestions(result.map(Survey::getId).getContent()).stream()
-                        .collect(Collectors.toMap(SurveyQuestionCount::surveyId, SurveyQuestionCount::questionCount));
+        List<UUID> ids = result.map(Survey::getId).getContent();
+        Map<UUID, Long> questionCounts = ids.isEmpty() ? Map.of() : toMap(surveyRepository.countQuestions(ids));
+        Map<UUID, Long> participantCounts = ids.isEmpty() ? Map.of() : toMap(invitationRepository.countBySurveyIds(ids));
         return new SurveyListResponse(
-                result.map(survey -> SurveyMapper.toSummary(survey, counts.getOrDefault(survey.getId(), 0L)))
+                result.map(survey -> SurveyMapper.toSummary(survey,
+                                questionCounts.getOrDefault(survey.getId(), 0L),
+                                participantCounts.getOrDefault(survey.getId(), 0L)))
                         .getContent(),
                 PageMeta.from(result));
     }
 
     @Transactional(readOnly = true)
     public SurveyDetailResponse get(UUID ownerId, UUID surveyId) {
-        return SurveyMapper.toDetail(findOwned(ownerId, surveyId));
+        Survey survey = findOwned(ownerId, surveyId);
+        return SurveyMapper.toDetail(survey, invitationRepository.countBySurveyId(surveyId));
     }
 
     /**
@@ -75,7 +83,8 @@ public class SurveyService {
         contentMerger.apply(survey, request);
         // Yeni soru/seçeneklerin id'leri yanıtta dönsün diye hemen yazılır.
         survey = surveyRepository.saveAndFlush(survey);
-        return new SaveResult(SurveyMapper.toDetail(survey), created);
+        long participants = created ? 0 : invitationRepository.countBySurveyId(survey.getId());
+        return new SaveResult(SurveyMapper.toDetail(survey, participants), created);
     }
 
     /** Yalnızca taslak silinir; yayınlanmış ankete yanıt gelmiş olabilir. */
@@ -86,6 +95,10 @@ public class SurveyService {
             throw new ApiException(HttpStatus.CONFLICT, "SURVEY_NOT_DELETABLE", "Yalnızca taslak anketler silinebilir");
         }
         surveyRepository.delete(survey);
+    }
+
+    private static Map<UUID, Long> toMap(List<SurveyCount> counts) {
+        return counts.stream().collect(Collectors.toMap(SurveyCount::surveyId, SurveyCount::count));
     }
 
     private Survey findOwned(UUID ownerId, UUID surveyId) {

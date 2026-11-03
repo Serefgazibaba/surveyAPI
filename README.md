@@ -57,6 +57,7 @@ IntelliJ'de çalıştırırken Run Configuration → Environment variables alan�
 | `DB_PASSWORD` | ✔ | | DB şifresi |
 | `JWT_SECRET` | ✔ | | HS256 imza anahtarı, en az 32 karakter (`openssl rand -base64 48`) |
 | `CORS_ALLOWED_ORIGINS` | | `http://localhost:3000` | Virgülle ayrılmış izinli origin'ler |
+| `FRONTEND_BASE_URL` | | `http://localhost:3000` | Davet linklerinin tabanı (`{FRONTEND_BASE_URL}/s/{token}`) |
 | `SERVER_PORT` | | `8080` | HTTP portu |
 | `DB_NAME`, `DB_PORT` | | `survey`, `5432` | Yalnızca docker-compose için |
 | `AUTH_SESSION_IDLE_TIMEOUT` | | `30m` | Son refresh'ten sonra oturumun düşeceği süre (FR-02) |
@@ -73,8 +74,8 @@ com.definex.survey
 ├─ security/    SecurityFilterChain, JWT encoder/decoder, JwtTokenService, Roles, 401/403 handler'ları
 ├─ exception/   GlobalExceptionHandler, ProblemDetailFactory, ApiException ve alt sınıfları
 ├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
-├─ auth/        /admin/auth/*, /user/auth/*
-├─ survey/      /admin/surveys/*, /admin/upsertSurvey (anket → sorular → seçenekler)
+├─ auth/        /admin/auth/*, /user/auth/*, /admin/getUsers
+├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey (anket → sorular → seçenekler, davetler)
 ├─ report/      /admin/surveys/{surveyId}/report*
 └─ user/        katılımcı tarafı: /user/surveys/* (form, ara kayıt, yanıt gönderimi)
 ```
@@ -204,6 +205,34 @@ curl -i -X DELETE http://localhost:8080/api/v1/admin/surveys/<surveyId> -H "Auth
 | Yayındaki ankette metin dışı değişiklik | 409 | `SURVEY_STRUCTURE_LOCKED` |
 | Süresi dolmuş / kapalı / arşivli anketi kaydetme | 409 | `SURVEY_NOT_EDITABLE` |
 | Taslak olmayan anketi silme | 409 | `SURVEY_NOT_DELETABLE` |
+
+## Örnek istekler (Yayınlama)
+
+Katılımcılar `users` tablosundaki `USER` rolündeki aktif kullanıcılardır. Admin anket düzenleme ekranında
+kullanıcıları listeleyip seçer, ardından anketi yayınlar. Her katılımcı için davete özel bir link üretilir
+(`{FRONTEND_BASE_URL}/s/{token}`); token'ın yalnızca hash'i saklanır. E-posta henüz gönderilmez: linkler yanıtta
+döner ve dev profilinde log'a yazılır.
+
+```bash
+# 1. Davet edilebilecek kullanıcılar (ad/e-posta araması, sayfalı)
+curl -s "http://localhost:8080/api/v1/admin/getUsers?q=zeynep&page=1&size=20" \
+  -H "Authorization: Bearer <accessToken>"
+
+# 2. Yayınla → 200; anket PUBLISHED olur, davet linkleri döner
+curl -s -X POST http://localhost:8080/api/v1/admin/publishSurvey \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"surveyId":"<surveyId>","userIds":["0a1b2c3d-0000-4000-8000-000000000101"]}'
+```
+
+Yayınlamadan önce tamlık kontrol edilir; eksikler tek seferde döner:
+
+| Durum | HTTP | `code` |
+|---|---|---|
+| Bitiş tarihi yok / geçmiş, yanıt modu yok, soru yok, soru metni/tipi boş, seçimli soruda 2'den az seçenek | 422 | `SURVEY_INCOMPLETE` |
+| Kullanıcı bulunamadı, `USER` değil veya pasif | 422 | `INVALID_PARTICIPANTS` |
+| Anket taslak değil (tekrar yayınlama dahil) | 409 | `INVALID_SURVEY_STATUS` |
+
+Yayındaki anketin bitiş tarihi geçince durum en geç bir dakika içinde otomatik olarak `EXPIRED` olur.
 
 ## Hata yanıtı örnekleri
 

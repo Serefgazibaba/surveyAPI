@@ -73,6 +73,12 @@ public class Survey extends BaseEntity {
         this.description = description;
     }
 
+    /** {@code DRAFT} → {@code PUBLISHED}. Ön koşullar çağıran service'te kontrol edilir. */
+    public void publish(Instant now) {
+        this.status = SurveyStatus.PUBLISHED;
+        this.publishedAt = now;
+    }
+
     /** Soru listesini verilen sırayla değiştirir; listede olmayan sorular silinir (orphanRemoval). */
     public void replaceQuestions(List<Question> ordered) {
         questions.clear();

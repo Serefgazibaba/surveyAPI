@@ -14,6 +14,7 @@ public record SurveySummaryResponse(
         ResponseMode responseMode,
         Instant endsAt,
         long questionCount,
+        long participantCount,
         List<SurveyAction> allowedActions,
         Instant createdAt,
         Instant updatedAt) {

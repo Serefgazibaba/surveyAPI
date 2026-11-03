@@ -27,6 +27,11 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: alpha
 
+app:
+  frontend:
+    # E-posta gönderimi yokken davet linkleri dev'de log'dan da alınabilsin
+    log-invitation-links: true
+
 logging:
   level:
     com.definex.survey: DEBUG

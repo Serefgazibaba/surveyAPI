@@ -14,7 +14,7 @@ final class SurveyMapper {
     private SurveyMapper() {
     }
 
-    static SurveyDetailResponse toDetail(Survey survey) {
+    static SurveyDetailResponse toDetail(Survey survey, long participantCount) {
         List<QuestionResponse> questions = survey.getQuestions().stream()
                 .map(SurveyMapper::toQuestion)
                 .toList();
@@ -26,13 +26,14 @@ final class SurveyMapper {
                 survey.getResponseMode(),
                 survey.getEndsAt(),
                 survey.getPublishedAt(),
+                participantCount,
                 SurveyActionPolicy.allowedActions(survey.getStatus()),
                 survey.getCreatedAt(),
                 survey.getUpdatedAt(),
                 questions);
     }
 
-    static SurveySummaryResponse toSummary(Survey survey, long questionCount) {
+    static SurveySummaryResponse toSummary(Survey survey, long questionCount, long participantCount) {
         return new SurveySummaryResponse(
                 survey.getId(),
                 survey.getTitle(),
@@ -40,6 +41,7 @@ final class SurveyMapper {
                 survey.getResponseMode(),
                 survey.getEndsAt(),
                 questionCount,
+                participantCount,
                 SurveyActionPolicy.allowedActions(survey.getStatus()),
                 survey.getCreatedAt(),
                 survey.getUpdatedAt());
