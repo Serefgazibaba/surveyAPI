@@ -49,3 +49,10 @@ app:
       lock-duration: 15m
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  frontend:
+    # Davet linki = base-url + "/s/" + token
+    base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+    # Link token içerdiği için yalnızca dev profilinde log'a yazılır
+    log-invitation-links: false
+  survey:
+    expiry-check-interval: 60s

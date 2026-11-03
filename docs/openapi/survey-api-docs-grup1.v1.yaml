@@ -27,7 +27,8 @@ info:
     - Tüm zaman alanları ISO-8601 UTC (`2026-11-30T21:00:00Z`) taşınır; ekranda Europe/Istanbul gösterilir (FR-50).
     - Hatalar `application/problem+json` (RFC 7807) formatındadır; makine tarafından okunacak alan `code`'dur.
     - Admin yalnızca kendi anketlerine erişir (BR-09). Başkasına ait anket için `404` döner (varlık sızdırılmaz).
-    - Eşzamanlı düzenleme koruması: `GET /admin/surveys/{surveyId}` `ETag` döner, `PATCH` isteği `If-Match` ile gönderilir.
+    - Anket yapısı bölümsüzdür: anket → sorular → seçenekler. Anket oluşturma ve güncelleme tek uçtan yapılır
+      (`POST /admin/upsertSurvey`); eşzamanlı düzenlemede son kaydeden kazanır.
 
     **Versiyonlama**
     - Major sürüm URL'de taşınır: `/api/v1`. Bu doküman v1 sözleşmesidir.
@@ -44,6 +45,8 @@ tags:
     description: Admin kimlik doğrulama
   - name: Admin - Surveys
     description: Anket yönetimi ve yaşam döngüsü
+  - name: Admin - Users
+    description: Ankete davet edilecek kullanıcılar
   - name: Admin - Reports
     description: Anket raporu ve dışa aktarım
   - name: User - Auth
@@ -165,8 +168,8 @@ paths:
     get:
       tags: [Admin - Surveys]
       operationId: adminListSurveys
-      summary: Anketlerim listesi
-      description: Admin'in sahip olduğu anketleri sayfalı döner; ada göre arama, duruma göre filtre, sütuna göre sıralama (FR-10).
+      summary: Anketleri listele
+      description: Admin'in sahip olduğu anketleri sayfalı döner; başlıkta arama, duruma göre filtre, sıralama (FR-10).
       security:
         - adminAuth: []
       parameters:
@@ -190,8 +193,8 @@ paths:
           description: Sıralama alanı; `-` öneki azalan sıralama.
           schema:
             type: string
-            enum: [title, -title, endsAt, -endsAt, createdAt, -createdAt, responseRate, -responseRate]
-            default: -createdAt
+            enum: [title, -title, endsAt, -endsAt, createdAt, -createdAt, updatedAt, -updatedAt]
+            default: -updatedAt
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
       responses:
@@ -205,14 +208,38 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /admin/upsertSurvey:
     post:
       tags: [Admin - Surveys]
-      operationId: adminCreateSurvey
-      summary: Anket oluştur
+      operationId: adminUpsertSurvey
+      summary: Anketi kaydet (upsert: oluştur / güncelle)
       description: |
-        Boş anket ya da `templateId` ile şablondan anket oluşturur (FR-12). Anket `DRAFT` durumunda açılır.
-        - `sections` verilmezse ve şablon yoksa tek bir varsayılan bölüm otomatik oluşturulur (FR-21).
-        - `templateId` verilirse şablonun bölüm ve soruları kopyalanır; bu durumda `sections` gönderilemez.
+        Anket ekranındaki "Kaydet" (upsert). "Yeni anket" ekranını ön yüz hazırlar; ilk kaydetmede anket oluşur,
+        sonraki kaydetmelerde aynı uç güncelleme yapar.
+
+        **Oluşturma / güncelleme**
+        - Gövdede `id` yoksa yeni anket `DRAFT` durumunda oluşturulur → `201` + `Location`.
+        - `id` varsa anket güncellenir → `200`. Anket yoksa veya başka bir admin'e aitse `404`.
+        - Yanıt anketin güncel hâlidir; yeni oluşan soru ve seçeneklerin id'leri yanıtta döner. Ön yüz sonraki
+          kaydetmede bu id'leri geri gönderir.
+
+        **Sorular ve seçenekler** (`questions`, `options`)
+        - `id`'li olan güncellenir, `id`'siz olan eklenir, listede olmayan **silinir**.
+        - Dizi sırası = görüntüleme sırası. Soru numarası (`number`) buna göre hesaplanır.
+        - `questions` gönderilmezse veya boşsa anketin tüm soruları silinir.
+
+        **Taslak kaydı**: Yalnızca `title` zorunludur. Diğer alanlar boş olabilir; dolu gelirlerse biçimleri kontrol
+        edilir. Tamlık (bitiş tarihi, en az bir soru, seçimli sorularda en az iki seçenek vb.) yayınlamada kontrol edilir.
+
+        **Duruma göre izinler**
+        | Durum | İzin verilen |
+        |---|---|
+        | `DRAFT` | Tüm alanlar |
+        | `PUBLISHED` | Yalnızca metinler: `title`, `description`, soru `text`, seçenek `label`. Soru/seçenek ekleme, silme, sıra, `type`, `required`, `settings`, `endsAt`, `responseMode` değişirse `409 SURVEY_STRUCTURE_LOCKED` (BR-04, BR-05). Değişmeyen alanlar da gönderilmelidir. |
+        | `EXPIRED`, `CLOSED`, `ARCHIVED` | Kaydedilemez → `409 SURVEY_NOT_EDITABLE` |
+
+        Eşzamanlı düzenlemede son kaydeden kazanır.
       security:
         - adminAuth: []
       requestBody:
@@ -220,23 +247,56 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SurveyCreateRequest'
+              $ref: '#/components/schemas/SurveySaveRequest'
             examples:
-              blank:
-                summary: Boş anket
+              firstSave:
+                summary: İlk kayıt (id yok, yarım anket)
                 value:
                   title: 2026 Q4 Çalışan Memnuniyeti
                   description: Çeyrek sonu memnuniyet anketi
-                  endsAt: '2026-11-30T21:00:00Z'
                   responseMode: ANONYMOUS
-              fromTemplate:
-                summary: Şablondan anket
+                  questions:
+                    - text: Şirketimizde çalışmaktan memnunum.
+                      type: LIKERT
+                      required: true
+                    - text: Hangi yan hakları kullanıyorsunuz?
+                      type: MULTIPLE_CHOICE
+                      settings:
+                        maxSelect: 3
+                      options:
+                        - label: Özel sağlık sigortası
+                    - type: FREE_TEXT
+              nextSave:
+                summary: Sonraki kayıt (id'ler geri gönderilir)
                 value:
-                  title: 2027 Q1 Çalışan Memnuniyeti
-                  endsAt: '2027-03-31T21:00:00Z'
+                  id: 9a7d3c21-4b8e-4f0a-a1c2-7e5d9b3f2a68
+                  title: 2026 Q4 Çalışan Memnuniyeti
+                  description: Çeyrek sonu memnuniyet anketi
                   responseMode: ANONYMOUS
-                  templateId: 6f1c2b9e-0d7a-4a43-9c1e-5b8f2a1d3e40
+                  endsAt: '2026-11-30T21:00:00Z'
+                  questions:
+                    - id: 3e6b9d85-1a3f-4c9e-8d1b-6c5a4f0e8d43
+                      text: Eklemek istedikleriniz?
+                      type: FREE_TEXT
+                      settings:
+                        multiline: true
+                        maxLength: 1000
+                    - id: 2d5a8c74-0f2e-4b8d-9c0a-5b4f3e9d7c32
+                      text: Hangi yan hakları kullanıyorsunuz?
+                      type: MULTIPLE_CHOICE
+                      settings:
+                        maxSelect: 3
+                      options:
+                        - id: 7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+                          label: Özel sağlık sigortası
+                        - label: Yemek kartı
       responses:
+        '200':
+          description: Anket güncellendi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurveyDetail'
         '201':
           description: Anket oluşturuldu
           headers:
@@ -244,107 +304,6 @@ paths:
               description: Oluşturulan anketin adresi
               schema:
                 type: string
-            ETag:
-              $ref: '#/components/headers/ETag'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SurveyDetail'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          description: '`templateId` bulunamadı'
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-        '422':
-          $ref: '#/components/responses/BusinessRuleViolation'
-
-  /admin/surveys/{surveyId}:
-    parameters:
-      - $ref: '#/components/parameters/SurveyId'
-    get:
-      tags: [Admin - Surveys]
-      operationId: adminGetSurvey
-      summary: Anket detayı (Admin)
-      description: Anketi bölüm, soru ve seçenek ağacıyla birlikte döner. `allowedActions` ekranda hangi aksiyonların aktif olacağını belirler (FR-11).
-      security:
-        - adminAuth: []
-      responses:
-        '200':
-          description: Anket detayı
-          headers:
-            ETag:
-              $ref: '#/components/headers/ETag'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SurveyDetail'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    patch:
-      tags: [Admin - Surveys]
-      operationId: adminUpdateSurvey
-      summary: Anket güncelle
-      description: |
-        Anketi kısmi olarak günceller (“Anketi Kaydet”, FR-27). Gönderilmeyen alanlar değişmez.
-
-        **`sections` alanı** verilirse anketin bölüm/soru yapısının **tamamını** temsil eder:
-        `id` taşıyan bölüm/soru/seçenekler güncellenir, `id`'siz olanlar eklenir, listede olmayanlar silinir.
-        Dizi sırası `sortOrder`'ı belirler (FR-24).
-
-        **Duruma göre izinler**
-        | Durum | İzin verilen |
-        |---|---|
-        | `DRAFT` | Tüm alanlar |
-        | `PUBLISHED` | `title`, `description`, soru/seçenek/bölüm **metinleri** (yazım düzeltmesi). Soru ekleme/silme, tip veya sıra değişikliği ve `responseMode` değişikliği yasak (BR-04, BR-05) |
-        | `EXPIRED`, `CLOSED`, `ARCHIVED` | Güncelleme yapılamaz. Bitiş tarihi uzatma ayrı bir uçla yapılacaktır |
-      security:
-        - adminAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IfMatch'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SurveyUpdateRequest'
-            example:
-              title: 2026 Q4 Çalışan Memnuniyeti
-              endsAt: '2026-12-05T21:00:00Z'
-              sections:
-                - id: 0b3e6a52-8d0c-4f6b-9a8e-3f2d1c7b5a10
-                  title: Genel Memnuniyet
-                  questions:
-                    - id: 1c4f7b63-9e1d-4a7c-8b9f-4a3e2d8c6b21
-                      text: Şirketimizde çalışmaktan memnunum.
-                      type: LIKERT
-                      required: true
-                      settings:
-                        scale: 5
-                        minLabel: Kesinlikle Katılmıyorum
-                        maxLabel: Kesinlikle Katılıyorum
-                    - text: Hangi yan hakları kullanıyorsunuz?
-                      type: MULTIPLE_CHOICE
-                      required: false
-                      settings:
-                        minSelect: 1
-                        maxSelect: 3
-                      options:
-                        - label: Özel sağlık sigortası
-                        - label: Yemek kartı
-                        - label: Esnek çalışma
-      responses:
-        '200':
-          description: Güncellenmiş anket
-          headers:
-            ETag:
-              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -356,27 +315,64 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Anketin mevcut durumu bu değişikliğe izin vermiyor
+          description: |
+            `SURVEY_STRUCTURE_LOCKED`: yayındaki ankette metin dışı değişiklik.
+            `SURVEY_NOT_EDITABLE`: anket bu durumda düzenlenemez.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
               example:
                 type: https://survey.example.com/problems/survey-structure-locked
-                title: Yayındaki ankette soru yapısı değiştirilemez
+                title: Yayındaki ankette yalnızca metinler değiştirilebilir
                 status: 409
                 code: SURVEY_STRUCTURE_LOCKED
-        '412':
-          $ref: '#/components/responses/PreconditionFailed'
         '422':
-          $ref: '#/components/responses/BusinessRuleViolation'
-        '428':
-          $ref: '#/components/responses/PreconditionRequired'
+          description: |
+            `INVALID_STRUCTURE`: aynı id iki kez gönderildi, soru/seçenek id'si bu ankete (soruya) ait değil veya
+            seçimli olmayan tipe seçenek gönderildi. Hatalı alanlar `errors[].field` ile döner.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://survey.example.com/problems/invalid-structure
+                title: Anket yapısı geçersiz
+                status: 422
+                code: INVALID_STRUCTURE
+                errors:
+                  - field: questions[1].id
+                    code: UNKNOWN_ID
+                    message: Bu soru bu ankete ait değil
+
+  /admin/surveys/{surveyId}:
+    parameters:
+      - $ref: '#/components/parameters/SurveyId'
+    get:
+      tags: [Admin - Surveys]
+      operationId: adminGetSurvey
+      summary: Anketi getir
+      description: Anketi soruları ve seçenekleriyle döner. `allowedActions` ekranda hangi aksiyonların aktif olacağını belirler (FR-11).
+      security:
+        - adminAuth: []
+      responses:
+        '200':
+          description: Anket detayı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurveyDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags: [Admin - Surveys]
       operationId: adminDeleteSurvey
-      summary: Anket sil
-      description: Anketi kalıcı olarak siler. Yanıtı olan anket silinemez, yalnızca arşivlenebilir (BR-08). İşlem denetim kaydına yazılır (NFR-07).
+      summary: Anketi sil
+      description: |
+        Anketi soruları ve seçenekleriyle kalıcı olarak siler. Yalnızca `DRAFT` anket silinebilir; yayınlanmış ankete
+        yanıt gelmiş olabilir (BR-08). Yanıt modülü eklendiğinde kural "yanıtı yoksa silinebilir" olarak gevşetilecek.
       security:
         - adminAuth: []
       responses:
@@ -387,64 +383,135 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Anketin yanıtı var
+          description: Anket taslak değil
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
               example:
-                type: https://survey.example.com/problems/survey-has-responses
-                title: Yanıtı olan anket silinemez, arşivleyebilirsiniz
+                type: https://survey.example.com/problems/survey-not-deletable
+                title: Yalnızca taslak anketler silinebilir
                 status: 409
-                code: SURVEY_HAS_RESPONSES
+                code: SURVEY_NOT_DELETABLE
 
-  /admin/surveys/{surveyId}/publish:
-    parameters:
-      - $ref: '#/components/parameters/SurveyId'
-    post:
-      tags: [Admin - Surveys]
-      operationId: adminPublishSurvey
-      summary: Anketi yayınla ve davetleri gönder
+  /admin/getAllUsers:
+    get:
+      tags: [Admin - Users]
+      operationId: adminGetAllUsers
+      summary: Davet edilebilecek kullanıcıları listele
       description: |
-        “Gönder” aksiyonu (FR-42). Anketi `DRAFT` → `PUBLISHED` durumuna geçirir, her katılımcı için tek kullanımlık
-        davet tokenı üretir ve davet e-postalarını kuyruğa alır. E-postalar asenkron gönderilir (NFR-10); yanıttaki özet
-        kuyruğa alınan davetleri gösterir, gönderim tamamlandığında Admin'e “Gönderim özeti” e-postası gider.
-
-        **Ön koşullar** (sağlanmazsa `422`, `errors` listesinde hangi kuralın bozulduğu döner)
-        - Anket `DRAFT` durumunda olmalı (değilse `409`)
-        - En az bir soru olmalı (`SURVEY_HAS_NO_QUESTIONS`)
-        - En az bir katılımcı olmalı (`SURVEY_HAS_NO_PARTICIPANTS`)
-        - `endsAt` gelecekte olmalı (`END_DATE_IN_PAST`)
-
-        `Idempotency-Key` ile tekrarlanan istek aynı sonucu döner, davetler ikinci kez gönderilmez.
+        Anket düzenleme ekranında katılımcı seçimi için kullanılır. Yalnızca `USER` rolündeki aktif kullanıcılar
+        döner; ada göre artan sıralıdır. Ayrı bir katılımcı tablosu yoktur; katılımcılar `users` tablosundadır.
       security:
         - adminAuth: []
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: q
+          in: query
+          description: Ad veya e-postada arama (büyük/küçük harf duyarsız)
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
       responses:
-        '202':
-          description: Anket yayınlandı, davetler gönderim kuyruğuna alındı
+        '200':
+          description: Kullanıcı listesi
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PublishResponse'
+                $ref: '#/components/schemas/UserListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/publishSurvey:
+    post:
+      tags: [Admin - Surveys]
+      operationId: adminPublishSurvey
+      summary: Anketi yayınla
+      description: |
+        "Gönder" aksiyonu (FR-42). Seçilen katılımcılar (`GET /admin/getAllUsers`) için davet oluşturur ve anketi
+        `DRAFT` → `PUBLISHED` yapar.
+
+        **Kontroller (sırayla)**
+        1. Anket yoksa veya başka bir admin'e aitse `404`.
+        2. Anket `DRAFT` değilse `409 INVALID_SURVEY_STATUS`. Tekrar gönderim de bu hatayı alır; idempotency anahtarı gerekmez.
+        3. Tamlık kuralları sağlanmıyorsa `422 SURVEY_INCOMPLETE`; tüm eksikler tek seferde `errors[]` içinde döner:
+
+           | `code` | `field` | Kural |
+           |---|---|---|
+           | `END_DATE_REQUIRED` / `END_DATE_IN_PAST` | `endsAt` | dolu ve gelecekte (FR-20) |
+           | `RESPONSE_MODE_REQUIRED` | `responseMode` | dolu |
+           | `SURVEY_HAS_NO_QUESTIONS` | `questions` | en az 1 soru |
+           | `TEXT_REQUIRED` / `TYPE_REQUIRED` | `questions[i].text` / `.type` | dolu |
+           | `MIN_TWO_OPTIONS` | `questions[i].options` | seçimli soruda etiketi dolu en az 2 seçenek (FR-22) |
+           | `LABEL_REQUIRED` | `questions[i].options[j].label` | dolu |
+           | `MAX_SELECT_EXCEEDS_OPTIONS` | `questions[i].settings.maxSelect` | seçenek sayısını aşamaz |
+        4. `userIds` içinde bulunamayan, `USER` rolünde olmayan veya pasif kullanıcı varsa `422 INVALID_PARTICIPANTS`
+           (`errors[].field` = `userIds[i]`). Tekrarlanan id'ler tekilleştirilir.
+
+        **Davetler**
+        - Her katılımcı için davete özel, 256 bit bir token üretilir; yalnızca SHA-256 hash'i saklanır (NFR-02).
+        - Link: `{FRONTEND_BASE_URL}/s/{token}`. İlk adımda katılımcı şifre girmez; link tek başına anket erişimi sağlar.
+        - Davet geçerliliği anketin `endsAt` değerinden türetilir. Yanıt gönderildikten sonra link kullanılamaz.
+        - E-posta henüz gönderilmez. Linkler yanıttaki `invitations` alanında döner (geçici; mail altyapısı
+          eklendiğinde kaldırılacak) ve dev profilinde log'a yazılır.
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishSurveyRequest'
+            example:
+              surveyId: 9a7d3c21-4b8e-4f0a-a1c2-7e5d9b3f2a68
+              userIds:
+                - 0a1b2c3d-0000-4000-8000-000000000101
+                - 0a1b2c3d-0000-4000-8000-000000000102
+      responses:
+        '200':
+          description: Anket yayınlandı, davetler oluşturuldu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishSurveyResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Anket zaten yayınlanmış veya yayınlanabilir durumda değil
+          description: Anket taslak değil
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
               example:
                 type: https://survey.example.com/problems/invalid-survey-status
-                title: Anket bu durumda yayınlanamaz
+                title: Yalnızca taslak anket yayınlanabilir
                 status: 409
                 code: INVALID_SURVEY_STATUS
         '422':
-          $ref: '#/components/responses/BusinessRuleViolation'
+          description: '`SURVEY_INCOMPLETE` veya `INVALID_PARTICIPANTS`'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://survey.example.com/problems/survey-incomplete
+                title: Anket yayınlanmaya hazır değil
+                status: 422
+                code: SURVEY_INCOMPLETE
+                errors:
+                  - field: endsAt
+                    code: END_DATE_REQUIRED
+                    message: Bitiş tarihi girilmelidir
+                  - field: questions[0].options
+                    code: MIN_TWO_OPTIONS
+                    message: En az iki seçenek girilmelidir
 
   /admin/surveys/{surveyId}/report:
     parameters:
@@ -463,12 +530,6 @@ paths:
       security:
         - adminAuth: []
       parameters:
-        - name: sectionId
-          in: query
-          description: Raporu tek bir bölümle sınırla (FR-75)
-          schema:
-            type: string
-            format: uuid
         - name: textAnswerLimit
           in: query
           description: Serbest metin sorularında dönecek en yeni yanıt sayısı
@@ -700,7 +761,7 @@ paths:
             schema:
               $ref: '#/components/schemas/UserDraftRequest'
             example:
-              currentSectionId: 0b3e6a52-8d0c-4f6b-9a8e-3f2d1c7b5a10
+              currentQuestionId: 1c4f7b63-9e1d-4a7c-8b9f-4a3e2d8c6b21
               answers:
                 - questionId: 1c4f7b63-9e1d-4a7c-8b9f-4a3e2d8c6b21
                   numericValue: 4
@@ -830,13 +891,6 @@ components:
         minimum: 1
         maximum: 100
         default: 20
-    IfMatch:
-      name: If-Match
-      in: header
-      required: true
-      description: Son okunan `ETag` değeri; başkası arada güncellediyse `412` döner
-      schema:
-        type: string
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -845,12 +899,6 @@ components:
       schema:
         type: string
         maxLength: 64
-
-  headers:
-    ETag:
-      description: Anketin sürüm etiketi
-      schema:
-        type: string
 
   responses:
     ValidationError:
@@ -868,20 +916,6 @@ components:
               - field: title
                 code: REQUIRED
                 message: Başlık zorunludur
-    BusinessRuleViolation:
-      description: İstek geçerli ancak bir iş kuralını ihlal ediyor
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-          example:
-            type: https://survey.example.com/problems/business-rule-violation
-            title: Anket yayınlanamıyor
-            status: 422
-            code: BUSINESS_RULE_VIOLATION
-            errors:
-              - code: SURVEY_HAS_NO_PARTICIPANTS
-                message: Ankete en az bir katılımcı eklenmelidir
     Unauthorized:
       description: Token yok, süresi dolmuş veya bu uç grubu için geçersiz (admin/user)
       content:
@@ -915,23 +949,6 @@ components:
             title: Anket bulunamadı
             status: 404
             code: SURVEY_NOT_FOUND
-    PreconditionFailed:
-      description: Anket siz okuduktan sonra değiştirildi; yeniden okuyup tekrar deneyin
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-          example:
-            type: https://survey.example.com/problems/version-conflict
-            title: Anket başka bir oturumda güncellendi
-            status: 412
-            code: VERSION_CONFLICT
-    PreconditionRequired:
-      description: '`If-Match` başlığı eksik'
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
     TooManyRequests:
       description: Çok fazla istek
       headers:
@@ -1020,7 +1037,7 @@ components:
       properties:
         field:
           type: string
-          description: Hatanın oluştuğu alan yolu, ör. `sections[0].questions[2].options` veya soru kimliği
+          description: Hatanın oluştuğu alan yolu, ör. `questions[2].options[0].id` veya soru kimliği
         code:
           type: string
         message:
@@ -1146,12 +1163,14 @@ components:
       enum: [ANONYMOUS, IDENTIFIED]
     SurveyAction:
       type: string
-      description: Mevcut durumda Admin'in yapabileceği aksiyonlar (FR-11)
-      enum: [EDIT, PUBLISH, VIEW_REPORT, DUPLICATE, SAVE_AS_TEMPLATE, EXTEND_DEADLINE, CLOSE, ARCHIVE, UNARCHIVE, DELETE]
+      description: |
+        Mevcut durumda Admin'in yapabileceği aksiyonlar (FR-11). Yalnızca uygulanmış uçların aksiyonları döner;
+        diğerleri uçlar eklendikçe gelecek. `DRAFT`: EDIT, PUBLISH, DELETE · `PUBLISHED`: EDIT · diğer: boş.
+      enum: [EDIT, PUBLISH, DELETE]
 
     SurveySummary:
       type: object
-      required: [id, title, status, responseMode, endsAt, participantCount, responseCount, responseRate, allowedActions, createdAt, updatedAt]
+      required: [id, title, status, questionCount, participantCount, allowedActions, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -1161,22 +1180,18 @@ components:
         status:
           $ref: '#/components/schemas/SurveyStatus'
         responseMode:
-          $ref: '#/components/schemas/ResponseMode'
+          allOf:
+            - $ref: '#/components/schemas/ResponseMode'
+          nullable: true
         endsAt:
           type: string
           format: date-time
+          nullable: true
+        questionCount:
+          type: integer
         participantCount:
           type: integer
-        responseCount:
-          type: integer
-          description: Tamamlanmış yanıt sayısı
-        responseRate:
-          type: number
-          format: double
-          minimum: 0
-          maximum: 100
-          description: Katılım oranı yüzdesi (BR-10)
-          example: 64.5
+          description: Davet edilen katılımcı sayısı
         allowedActions:
           type: array
           items:
@@ -1199,90 +1214,9 @@ components:
           $ref: '#/components/schemas/PageMeta'
 
     SurveyDetail:
-      allOf:
-        - $ref: '#/components/schemas/SurveySummary'
-        - type: object
-          required: [sections, version]
-          properties:
-            description:
-              type: string
-              nullable: true
-            templateId:
-              type: string
-              format: uuid
-              nullable: true
-            publishedAt:
-              type: string
-              format: date-time
-              nullable: true
-            closedAt:
-              type: string
-              format: date-time
-              nullable: true
-            version:
-              type: integer
-              description: Eşzamanlılık sürümü; `ETag` ile aynı değeri taşır
-            sections:
-              type: array
-              items:
-                $ref: '#/components/schemas/Section'
-
-    SurveyCreateRequest:
       type: object
-      required: [title, endsAt, responseMode]
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 200
-        description:
-          type: string
-          maxLength: 2000
-        endsAt:
-          type: string
-          format: date-time
-          description: Geçmiş bir tarih olamaz (FR-20)
-        responseMode:
-          $ref: '#/components/schemas/ResponseMode'
-        templateId:
-          type: string
-          format: uuid
-          description: Verilirse şablonun bölüm ve soruları kopyalanır; katılımcı ve yanıt kopyalanmaz
-        sections:
-          type: array
-          description: İsteğe bağlı başlangıç yapısı; `templateId` ile birlikte gönderilemez
-          items:
-            $ref: '#/components/schemas/SectionInput'
-
-    SurveyUpdateRequest:
-      type: object
-      minProperties: 1
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 200
-        description:
-          type: string
-          maxLength: 2000
-          nullable: true
-        endsAt:
-          type: string
-          format: date-time
-          description: Yalnızca `DRAFT` durumunda bu uçla değiştirilir; yayındaki anket için ayrı uzatma ucu kullanılır
-        responseMode:
-          $ref: '#/components/schemas/ResponseMode'
-        sections:
-          type: array
-          minItems: 1
-          description: Verilirse anketin tam bölüm/soru yapısını temsil eder (bkz. uç açıklaması)
-          items:
-            $ref: '#/components/schemas/SectionInput'
-
-    # ---------- Section / Question ----------
-    Section:
-      type: object
-      required: [id, title, sortOrder, questions]
+      description: Değeri olmayan (null) alanlar yanıtta yer almaz.
+      required: [id, title, status, participantCount, allowedActions, createdAt, updatedAt, questions]
       properties:
         id:
           type: string
@@ -1292,69 +1226,74 @@ components:
         description:
           type: string
           nullable: true
-        sortOrder:
+        status:
+          $ref: '#/components/schemas/SurveyStatus'
+        responseMode:
+          allOf:
+            - $ref: '#/components/schemas/ResponseMode'
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        participantCount:
           type: integer
+          description: Davet edilen katılımcı sayısı
+        allowedActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveyAction'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
         questions:
           type: array
           items:
             $ref: '#/components/schemas/Question'
-    SectionInput:
+
+    SurveySaveRequest:
       type: object
+      description: Upsert gövdesi. Yalnızca `title` zorunludur; diğer alanlar taslakta boş olabilir.
       required: [title]
       properties:
         id:
           type: string
           format: uuid
-          description: Mevcut bölüm için verilir; yeni bölümde boş bırakılır
+          description: Yoksa yeni anket oluşturulur; varsa bu anket güncellenir
         title:
           type: string
           minLength: 1
           maxLength: 200
         description:
           type: string
-          maxLength: 1000
+          maxLength: 2000
+        endsAt:
+          type: string
+          format: date-time
+          description: Yayınlamada zorunlu ve gelecekte olmalı (FR-20)
+        responseMode:
+          $ref: '#/components/schemas/ResponseMode'
         questions:
           type: array
+          maxItems: 200
+          description: Dizi sırası = soru sırası; listede olmayan mevcut sorular silinir
           items:
-            $ref: '#/components/schemas/QuestionInput'
-
-    QuestionType:
-      type: string
-      description: MVP soru tipleri. Yeni tipler (slider, matris vb.) eklendiğinde genişler (NFR-20).
-      enum: [LIKERT, SINGLE_CHOICE, MULTIPLE_CHOICE, FREE_TEXT]
-    Question:
+            $ref: '#/components/schemas/QuestionSaveInput'
+    QuestionSaveInput:
       type: object
-      required: [id, number, text, type, required, sortOrder, settings]
-      properties:
-        id:
-          type: string
-          format: uuid
-        number:
-          type: integer
-          description: Anket genelinde görünen soru numarası; sıralama değişince otomatik güncellenir (FR-24)
-        text:
-          type: string
-        type:
-          $ref: '#/components/schemas/QuestionType'
-        required:
-          type: boolean
-        sortOrder:
-          type: integer
-        settings:
-          $ref: '#/components/schemas/QuestionSettings'
-        options:
-          type: array
-          description: Yalnızca `SINGLE_CHOICE` ve `MULTIPLE_CHOICE` için
-          items:
-            $ref: '#/components/schemas/Option'
-    QuestionInput:
-      type: object
-      required: [text, type, required]
       description: |
-        Doğrulama kuralları (FR-22):
-        - `SINGLE_CHOICE` / `MULTIPLE_CHOICE` için en az 2 seçenek
-        - `LIKERT` ve `FREE_TEXT` için `options` gönderilmez
-        - `settings` soru tipine uygun olmalı
+        Taslakta tüm alanlar boş olabilir.
+        - `settings` yalnızca `type` doluyken gönderilir; tipe uymayan veya bilinmeyen alan `400` döner.
+          Eksik ayarlar varsayılanlarla doldurulur.
+        - `options` yalnızca `SINGLE_CHOICE` ve `MULTIPLE_CHOICE` için gönderilir (aksi `422 INVALID_STRUCTURE`).
+          Tip seçimliden başka bir tipe değişirse seçenekler silinir.
       properties:
         id:
           type: string
@@ -1362,18 +1301,66 @@ components:
           description: Mevcut soru için verilir; yeni soruda boş bırakılır
         text:
           type: string
-          minLength: 1
           maxLength: 1000
         type:
           $ref: '#/components/schemas/QuestionType'
         required:
           type: boolean
+          default: false
         settings:
           $ref: '#/components/schemas/QuestionSettings'
         options:
           type: array
+          maxItems: 100
+          description: Dizi sırası = seçenek sırası; listede olmayan mevcut seçenekler silinir
           items:
-            $ref: '#/components/schemas/OptionInput'
+            $ref: '#/components/schemas/OptionSaveInput'
+    OptionSaveInput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Mevcut seçenek için verilir; yeni seçenekte boş bırakılır
+        label:
+          type: string
+          maxLength: 200
+
+    # ---------- Question ----------
+    QuestionType:
+      type: string
+      description: MVP soru tipleri. Yeni tipler (slider, matris vb.) eklendiğinde genişler (NFR-20).
+      enum: [LIKERT, SINGLE_CHOICE, MULTIPLE_CHOICE, FREE_TEXT]
+    Question:
+      type: object
+      description: Taslakta `text`, `type` ve `settings` boş olabilir (null alanlar yanıtta yer almaz).
+      required: [id, number, required, options]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          description: Anket genelinde görünen soru numarası (1'den başlar); sıralama değişince güncellenir (FR-24)
+        text:
+          type: string
+          nullable: true
+        type:
+          allOf:
+            - $ref: '#/components/schemas/QuestionType'
+          nullable: true
+        required:
+          type: boolean
+        settings:
+          allOf:
+            - $ref: '#/components/schemas/QuestionSettings'
+          nullable: true
+          description: Tip seçiliyse varsayılanlarla tamamlanmış ayarlar
+        options:
+          type: array
+          description: Yalnızca `SINGLE_CHOICE` ve `MULTIPLE_CHOICE` için dolu
+          items:
+            $ref: '#/components/schemas/Option'
     QuestionSettings:
       description: |
         Soru tipine özel ayarlar. Hangi şemanın geçerli olduğunu sorunun `type` alanı belirler
@@ -1444,31 +1431,59 @@ components:
           default: 1000
     Option:
       type: object
-      required: [id, label, sortOrder]
+      required: [id, sortOrder]
       properties:
         id:
           type: string
           format: uuid
         label:
           type: string
+          nullable: true
         sortOrder:
           type: integer
-    OptionInput:
+
+    # ---------- Users / Publish ----------
+    UserSummary:
       type: object
-      required: [label]
+      description: Ankete davet edilebilecek kullanıcı (`USER` rolünde, aktif)
+      required: [id, fullName, email]
       properties:
         id:
           type: string
           format: uuid
-        label:
+        fullName:
           type: string
-          minLength: 1
-          maxLength: 200
-
-    # ---------- Publish ----------
-    PublishResponse:
+        email:
+          type: string
+          format: email
+    UserListResponse:
       type: object
-      required: [surveyId, status, publishedAt, dispatch]
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSummary'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+    PublishSurveyRequest:
+      type: object
+      required: [surveyId, userIds]
+      properties:
+        surveyId:
+          type: string
+          format: uuid
+        userIds:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          description: Davet edilecek katılımcılar; tekrarlananlar tekilleştirilir
+          items:
+            type: string
+            format: uuid
+    PublishSurveyResponse:
+      type: object
+      required: [surveyId, status, publishedAt, invitationCount, invitations]
       properties:
         surveyId:
           type: string
@@ -1478,38 +1493,38 @@ components:
         publishedAt:
           type: string
           format: date-time
-        dispatch:
-          $ref: '#/components/schemas/DispatchSummary'
+        invitationCount:
+          type: integer
+        invitations:
+          type: array
+          description: Geçici; e-posta gönderimi eklenince yanıttan çıkarılacak. Linkler hassastır.
+          items:
+            $ref: '#/components/schemas/InvitationLink'
       example:
         surveyId: 9a7d3c21-4b8e-4f0a-a1c2-7e5d9b3f2a68
         status: PUBLISHED
-        publishedAt: '2026-11-02T09:15:00Z'
-        dispatch:
-          id: 3e8b1f47-2c6d-4a9e-b5f0-8d7c4a2e1b93
-          status: QUEUED
-          totalCount: 120
-          queuedCount: 120
-          sentCount: 0
-          failedCount: 0
-    DispatchSummary:
+        publishedAt: '2026-11-03T12:00:00Z'
+        invitationCount: 1
+        invitations:
+          - userId: 0a1b2c3d-0000-4000-8000-000000000101
+            email: zeynep.kaya@definex.com
+            fullName: Zeynep Kaya
+            invitationUrl: http://localhost:3000/s/q7Zx0bR3kN9vYpL2mT6sWc1eHfJ4uAaD8gKiOn5rXyQ
+    InvitationLink:
       type: object
-      description: Davet gönderim özeti (S-06)
-      required: [id, status, totalCount, queuedCount, sentCount, failedCount]
+      required: [userId, email, fullName, invitationUrl]
       properties:
-        id:
+        userId:
           type: string
           format: uuid
-        status:
+        email:
           type: string
-          enum: [QUEUED, IN_PROGRESS, COMPLETED]
-        totalCount:
-          type: integer
-        queuedCount:
-          type: integer
-        sentCount:
-          type: integer
-        failedCount:
-          type: integer
+          format: email
+        fullName:
+          type: string
+        invitationUrl:
+          type: string
+          description: Davete özel link; tek başına ankete erişim sağlar
 
     # ---------- Report ----------
     SurveyReport:
@@ -1582,12 +1597,9 @@ components:
           FREE_TEXT: '#/components/schemas/FreeTextQuestionReport'
     QuestionReportBase:
       type: object
-      required: [questionId, sectionId, number, text, type, answerCount]
+      required: [questionId, number, text, type, answerCount]
       properties:
         questionId:
-          type: string
-          format: uuid
-        sectionId:
           type: string
           format: uuid
         number:
@@ -1678,10 +1690,6 @@ components:
         format:
           type: string
           enum: [CSV, PDF]
-        sectionId:
-          type: string
-          format: uuid
-          description: Yalnızca PDF için; raporu bir bölümle sınırlar
     ExportJobAccepted:
       type: object
       required: [exportId, status, format]
@@ -1703,7 +1711,7 @@ components:
     UserSurvey:
       type: object
       description: Katılımcıya gösterilen anket formu (S-08)
-      required: [id, title, responseMode, endsAt, sections, totalQuestionCount]
+      required: [id, title, responseMode, endsAt, questions, totalQuestionCount]
       properties:
         id:
           type: string
@@ -1726,32 +1734,16 @@ components:
         totalQuestionCount:
           type: integer
           description: İlerleme çubuğu için toplam soru sayısı (FR-61)
-        sections:
+        questions:
           type: array
-          description: Her bölüm formda bir sayfa olarak gösterilir
+          description: Sorular görüntüleme sırasıyla
           items:
-            $ref: '#/components/schemas/UserSection'
+            $ref: '#/components/schemas/UserQuestion'
         draft:
           allOf:
             - $ref: '#/components/schemas/UserDraft'
           nullable: true
           description: Daha önce ara kayıt yapıldıysa dolu döner
-    UserSection:
-      type: object
-      required: [id, title, questions]
-      properties:
-        id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        description:
-          type: string
-          nullable: true
-        questions:
-          type: array
-          items:
-            $ref: '#/components/schemas/UserQuestion'
     UserQuestion:
       type: object
       required: [id, number, text, type, required, settings]
@@ -1787,11 +1779,11 @@ components:
       type: object
       required: [answers, savedAt]
       properties:
-        currentSectionId:
+        currentQuestionId:
           type: string
           format: uuid
           nullable: true
-          description: Katılımcının kaldığı bölüm
+          description: Katılımcının kaldığı soru
         answers:
           type: array
           items:
@@ -1835,7 +1827,7 @@ components:
       type: object
       required: [answers]
       properties:
-        currentSectionId:
+        currentQuestionId:
           type: string
           format: uuid
         answers:
