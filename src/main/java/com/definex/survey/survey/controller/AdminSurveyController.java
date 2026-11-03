@@ -48,7 +48,7 @@ public class AdminSurveyController {
     }
 
     @GetMapping
-    @Operation(summary = "Anketleri listele",
+    @Operation(operationId = "adminListSurveys", summary = "Anketleri listele",
             description = "Admin'in anketlerini sayfalı döner. `status` verilmezse ARCHIVED hariç tümü listelenir.")
     public SurveyListResponse list(
             @AuthenticationPrincipal Jwt jwt,
@@ -61,31 +61,32 @@ public class AdminSurveyController {
         return surveyService.list(ownerId(jwt), q, status, parseSort(sort), page, size);
     }
 
-    @PostMapping
-    @Operation(summary = "Anketi kaydet (oluştur / güncelle)",
+    @PostMapping("/upsert")
+    @Operation(operationId = "adminUpsertSurvey", summary = "Anketi kaydet (upsert: oluştur / güncelle)",
             description = """
                     Upsert. Gövdede `id` yoksa yeni taslak anket oluşturulur (201), varsa güncellenir (200).
                     Sorular ve seçenekler: `id`'li olan güncellenir, `id`'siz olan eklenir, listede olmayan silinir;
                     sıra dizideki sıradır. Kaydetmede yalnızca `title` zorunludur.""")
-    public ResponseEntity<SurveyDetailResponse> save(@AuthenticationPrincipal Jwt jwt,
-                                                     @Valid @RequestBody SurveySaveRequest request) {
+    public ResponseEntity<SurveyDetailResponse> upsert(@AuthenticationPrincipal Jwt jwt,
+                                                       @Valid @RequestBody SurveySaveRequest request) {
         SaveResult result = surveyService.save(ownerId(jwt), request);
         if (!result.created()) {
             return ResponseEntity.ok(result.survey());
         }
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}").buildAndExpand(result.survey().id()).toUri();
+        // Location anketin kendi adresini gösterir (/admin/surveys/{id}), upsert ucunu değil.
+        URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/admin/surveys/{id}").buildAndExpand(result.survey().id()).toUri();
         return ResponseEntity.created(location).body(result.survey());
     }
 
     @GetMapping("/{surveyId}")
-    @Operation(summary = "Anketi getir", description = "Anketi soruları ve seçenekleriyle döner.")
+    @Operation(operationId = "adminGetSurvey", summary = "Anketi getir", description = "Anketi soruları ve seçenekleriyle döner.")
     public SurveyDetailResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID surveyId) {
         return surveyService.get(ownerId(jwt), surveyId);
     }
 
     @DeleteMapping("/{surveyId}")
-    @Operation(summary = "Anketi sil", description = "Yalnızca taslak (DRAFT) anketler silinebilir.")
+    @Operation(operationId = "adminDeleteSurvey", summary = "Anketi sil", description = "Yalnızca taslak (DRAFT) anketler silinebilir.")
     public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID surveyId) {
         surveyService.delete(ownerId(jwt), surveyId);
         return ResponseEntity.noContent().build();

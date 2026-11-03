@@ -166,14 +166,14 @@ curl -i -X POST http://localhost:8080/api/v1/admin/auth/logout -H "Authorization
 
 ## Örnek istekler (Admin anketler)
 
-Anket yapısı bölümsüzdür: anket → sorular → seçenekler. Oluşturma ve güncelleme tek uçtan yapılır (**upsert**):
+Anket yapısı bölümsüzdür: anket → sorular → seçenekler. Oluşturma ve güncelleme tek uçtan yapılır: **`POST /admin/surveys/upsert`**.
 gövdede `id` yoksa yeni taslak oluşur (`201`), varsa güncellenir (`200`). Sorular ve seçenekler için de `id`'li olan
 güncellenir, `id`'siz olan eklenir, listede olmayan silinir; dizi sırası = gösterim sırası. Kaydetmede yalnızca
 `title` zorunludur.
 
 ```bash
 # 1. İlk kayıt (id yok) → 201; yanıtta anket, soru ve seçenek id'leri döner
-curl -s -X POST http://localhost:8080/api/v1/admin/surveys \
+curl -s -X POST http://localhost:8080/api/v1/admin/surveys/upsert \
   -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
   -d '{"title":"2026 Q4 Çalışan Memnuniyeti","responseMode":"ANONYMOUS",
        "questions":[{"text":"Şirketimizde çalışmaktan memnunum.","type":"LIKERT","required":true},
@@ -182,7 +182,7 @@ curl -s -X POST http://localhost:8080/api/v1/admin/surveys \
 
 # 2. Sonraki kayıt (id'ler geri gönderilir) → 200
 #    Likert sorusu listede olmadığı için silinir, yeni seçenek eklenir.
-curl -s -X POST http://localhost:8080/api/v1/admin/surveys \
+curl -s -X POST http://localhost:8080/api/v1/admin/surveys/upsert \
   -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
   -d '{"id":"<surveyId>","title":"2026 Q4 Çalışan Memnuniyeti","responseMode":"ANONYMOUS",
        "endsAt":"2026-11-30T21:00:00Z",
