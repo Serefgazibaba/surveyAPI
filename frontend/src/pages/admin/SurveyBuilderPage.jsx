@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Shell from "../../components/Shell.jsx";
 import PageHead from "../../components/PageHead.jsx";
 import Button from "../../components/Button.jsx";
-import IconButton from "../../components/IconButton.jsx";
 import Badge from "../../components/Badge.jsx";
 import StatusBadge from "../../components/StatusBadge.jsx";
 import Field from "../../components/Field.jsx";
@@ -15,44 +14,20 @@ import ComingSoon from "../../components/ComingSoon.jsx";
 import Alert from "../../components/Alert.jsx";
 import ErrorAlert from "../../components/ErrorAlert.jsx";
 import ErrorState from "../../components/ErrorState.jsx";
-import EmptyState from "../../components/EmptyState.jsx";
 import Spinner from "../../components/Spinner.jsx";
 import { useToast } from "../../components/Toast.jsx";
 import useAsync from "../../hooks/useAsync.js";
 import { getSurvey, upsertSurvey } from "../../api/surveys.js";
-import { questionTypeLabel } from "../../utils/statusLabels.js";
 import { mapFieldErrors, indexFromPath } from "../../utils/errorMessages.js";
-import { emptySurvey, toForm, toPayload, newQuestion, cloneQuestion, editMode } from "../../utils/surveyForm.js";
+import { saveAsTemplate } from "../../api/templates.js";
+import { emptySurvey, toForm, toPayload, newQuestion, editMode } from "../../utils/surveyForm.js";
 import QuestionModal from "./QuestionModal.jsx";
+import QuestionList from "./QuestionList.jsx";
+import SaveAsTemplateModal from "./SaveAsTemplateModal.jsx";
 import SurveyPreviewModal from "./SurveyPreviewModal.jsx";
 
 const snapshot = form => JSON.stringify(toPayload(form));
 const crumbs = [{ label: "Anketlerim", to: "/surveys" }, { label: "Anket Oluşturma" }];
-
-function QuestionRow({ q, index, total, structural, canEdit, messages, dragging, dropTarget, drag, onEdit, onCopy, onDelete, onMove }) {
-  return <>
-    <div className={["question-row", messages?.length && "has-error", dragging && "dragging", dropTarget && "drop-target"].filter(Boolean).join(" ")}
-      draggable={structural} {...(structural ? drag : {})} id={`question-${index}`}>
-      {structural && <span className="grip" title="Sürükleyerek sırala">⠿</span>}
-      <span className="question-number">{index + 1}</span>
-      <div className="question-copy">
-        <b>{q.text || <span className="text-muted">Soru metni girilmedi</span>}{q.required && <em>*</em>}</b>
-        {q.options.length > 0 && <span className="question-meta">{q.options.length} seçenek</span>}
-      </div>
-      <span className={`chip${q.type === "LIKERT" ? " likert" : ""}`}>{questionTypeLabel(q.type)}</span>
-      {structural && <>
-        <IconButton icon="up" label="Yukarı taşı" disabled={index === 0} onClick={() => onMove(index, index - 1)} />
-        <IconButton icon="down" label="Aşağı taşı" disabled={index === total - 1} onClick={() => onMove(index, index + 1)} />
-      </>}
-      <IconButton icon={canEdit ? "edit" : "eye"} label={canEdit ? "Düzenle" : "Görüntüle"} onClick={onEdit} />
-      {structural && <>
-        <IconButton icon="copy" label="Kopyala" onClick={onCopy} />
-        <IconButton icon="trash" label="Sil" danger onClick={onDelete} />
-      </>}
-    </div>
-    {messages?.map((m, i) => <p key={i} className="question-error">{m}</p>)}
-  </>;
-}
 
 /** S-03 · Anket oluşturma / düzenleme (S-04 soru modalı dahil) */
 export default function SurveyBuilderPage() {
@@ -79,7 +54,7 @@ export default function SurveyBuilderPage() {
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState(null); // { index|null, question }
   const [preview, setPreview] = useState(false);
-  const [drag, setDrag] = useState({ from: null, over: null });
+  const [templateModal, setTemplateModal] = useState(false);
 
   const dirty = !!form && snapshot(form) !== saved;
   useEffect(() => {
@@ -143,19 +118,14 @@ export default function SurveyBuilderPage() {
     setQuestions(list => (modal.index === null ? [...list, q] : list.map((x, i) => (i === modal.index ? q : x))));
     setModal(null);
   };
-  const move = (from, to) => setQuestions(list => {
-    if (to < 0 || to >= list.length || from === to) return list;
-    const next = [...list];
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    return next;
-  });
-  const dragHandlers = index => ({
-    onDragStart: () => setDrag({ from: index, over: null }),
-    onDragOver: e => { e.preventDefault(); if (drag.over !== index) setDrag(d => ({ ...d, over: index })); },
-    onDrop: e => { e.preventDefault(); move(drag.from, index); setDrag({ from: null, over: null }); },
-    onDragEnd: () => setDrag({ from: null, over: null }),
-  });
+  // Şablon sunucudaki kayıttan alınır; kaydedilmemiş değişiklik varsa önce anket kaydedilir.
+  const saveTemplate = async ({ name, description }) => {
+    const res = dirty || !form.id ? await save({ quiet: true }) : form;
+    if (!res) { setTemplateModal(false); return; }
+    const template = await saveAsTemplate({ surveyId: res.id, name, description });
+    setTemplateModal(false);
+    toast.success(`"${template.name}" şablonu kaydedildi.`);
+  };
 
   const focusError = item => {
     const i = indexFromPath(item.field);
@@ -194,14 +164,8 @@ export default function SurveyBuilderPage() {
         <section className="panel section-panel" id="field-questions">
           <div className="section-heading"><Badge tone="gray">Sorular</Badge><b>{form.questions.length} soru</b></div>
           {fieldErrors.questions && <p className="field-error">{fieldErrors.questions}</p>}
-          {form.questions.length === 0 && <EmptyState title="Henüz soru yok" text="İlk sorunuzu ekleyerek başlayın." />}
-          {form.questions.map((q, i) => <QuestionRow key={q.key} q={q} index={i} total={form.questions.length}
-            structural={structural} canEdit={canEdit} messages={rowMessages[i]}
-            dragging={drag.from === i} dropTarget={drag.over === i && drag.from !== i} drag={dragHandlers(i)}
-            onEdit={() => openQuestion(i)} onMove={move}
-            onCopy={() => setQuestions(list => [...list.slice(0, i + 1), cloneQuestion(q), ...list.slice(i + 1)])}
-            onDelete={() => setQuestions(list => list.filter((_, j) => j !== i))} />)}
-          {structural && <Button icon="plus" disabled={form.questions.length >= 200} onClick={() => openQuestion(null)}>Yeni Soru</Button>}
+          <QuestionList questions={form.questions} setQuestions={setQuestions} structural={structural} canEdit={canEdit}
+            rowMessages={rowMessages} onOpen={openQuestion} />
         </section>
         {structural && <ComingSoon><Button icon="plus" disabled>Yeni Bölüm Ekle</Button></ComingSoon>}
       </div>
@@ -223,12 +187,14 @@ export default function SurveyBuilderPage() {
         <hr />
         <div className="inline-between"><span>Soru</span><b>{form.questions.length}</b></div>
         <div className="inline-between"><span>Zorunlu soru</span><b>{requiredCount}</b></div>
-        <ComingSoon block><Button variant="ghost" disabled>Şablon olarak kaydet</Button></ComingSoon>
+        <Button variant="ghost" icon="template" disabled={saving} onClick={() => setTemplateModal(true)}>Şablon olarak kaydet</Button>
       </aside>
     </div>
 
     {modal && <QuestionModal initial={modal.question} isNew={modal.index === null} textOnly={!structural}
       errors={modalErrors} onClose={() => setModal(null)} onSave={canEdit ? applyQuestion : () => setModal(null)} />}
+    {templateModal && <SaveAsTemplateModal defaultName={form.title} defaultDescription={form.description}
+      onSave={saveTemplate} onClose={() => setTemplateModal(false)} />}
     {preview && <SurveyPreviewModal form={form} onClose={() => setPreview(false)} />}
   </Shell>;
 }

@@ -21,6 +21,7 @@ const CODE_MESSAGES = {
 
   // Anket
   SURVEY_NOT_FOUND: { title: "Anket bulunamadı", hint: "Anket silinmiş olabilir ya da size ait değil." },
+  TEMPLATE_NOT_FOUND: { title: "Şablon bulunamadı", hint: "Şablon silinmiş olabilir ya da size ait değil." },
   SURVEY_STRUCTURE_LOCKED: { title: "Yayındaki ankette yalnızca metinler değiştirilebilir", hint: "Soru ekleme/silme, sıralama, tip, zorunluluk, bitiş tarihi ve yanıt modu yayından sonra değiştirilemez." },
   SURVEY_NOT_EDITABLE: { title: "Bu anket artık düzenlenemez", hint: "Süresi dolmuş, kapanmış veya arşivlenmiş anketler değiştirilemez." },
   SURVEY_NOT_DELETABLE: { title: "Bu anket silinemez", hint: "Yalnızca taslak durumundaki anketler silinebilir." },
@@ -84,6 +85,7 @@ const STATUS_DEFAULTS = {
 
 const FIELD_LABELS = {
   title: "Anket başlığı",
+  name: "Şablon adı",
   description: "Açıklama",
   endsAt: "Bitiş tarihi",
   responseMode: "Yanıt modu",

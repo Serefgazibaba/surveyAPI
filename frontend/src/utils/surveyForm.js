@@ -42,7 +42,9 @@ export function toForm(detail) {
     title: detail.title ?? "",
     description: detail.description ?? "",
     endsAt: detail.endsAt ?? null,
-    responseMode: detail.responseMode ?? null,
+    // Mod seçilmemiş taslak (ör. şablondan oluşturulan) yeni anketteki gibi Anonim varsayılanıyla açılır;
+    // ilk kaydetmede gönderilir.
+    responseMode: detail.responseMode ?? (detail.status === "DRAFT" ? "ANONYMOUS" : null),
     status: detail.status,
     allowedActions: detail.allowedActions ?? [],
     participantCount: detail.participantCount ?? 0,
@@ -73,6 +75,32 @@ export function toPayload(form) {
       required: !!q.required,
       settings: q.type ? q.settings : undefined,
       options: hasOptions(q.type) ? q.options.map(o => ({ id: o.id, label: o.label })) : undefined,
+    })),
+  };
+}
+
+// ---- Şablon ⇄ builder form. Şablon soruları kimlik taşımaz; form `title` alanı şablon adıdır.
+
+export function emptyTemplate() {
+  return { id: undefined, title: "", description: "", questions: [] };
+}
+
+/** TemplateDetail → form (soru/seçenek id'si yok; yalnızca React anahtarı üretilir). */
+export function templateToForm(detail) {
+  const { id, title, description, questions } = toForm({ ...detail, title: detail.name });
+  return { id, title, description, questions };
+}
+
+/** Form → POST /admin/upsertTemplate gövdesi; sorular içeriğin tamamıdır. */
+export function toTemplatePayload(form) {
+  const { id, title, description, questions } = toPayload(form);
+  return {
+    id,
+    name: title,
+    description,
+    questions: questions.map(q => ({
+      text: q.text, type: q.type, required: q.required, settings: q.settings,
+      options: q.options?.map(o => ({ label: o.label })),
     })),
   };
 }

@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Shell from "../../components/Shell.jsx";
 import PageHead from "../../components/PageHead.jsx";
 import Tabs from "../../components/Tabs.jsx";
 import Button from "../../components/Button.jsx";
 import IconButton from "../../components/IconButton.jsx";
 import Icon from "../../components/Icon.jsx";
-import ComingSoon from "../../components/ComingSoon.jsx";
 import SearchInput from "../../components/SearchInput.jsx";
 import FilterMenu from "../../components/FilterMenu.jsx";
 import DataTable from "../../components/DataTable.jsx";
@@ -24,6 +23,7 @@ const DEFAULT_SORT = "-updatedAt";
 /** S-02 · Anketlerim */
 export default function SurveyListPage() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const toast = useToast();
   const q = params.get("q") || "";
   const status = params.getAll("status");
@@ -87,9 +87,10 @@ export default function SurveyListPage() {
 
   const filtered = q || status.length;
   return <Shell>
-    <Tabs variant="seg" value="mine" items={[{ value: "mine", label: "Anketlerim" }, { value: "templates", label: "Şablonlar", disabled: true }]} />
+    <Tabs variant="seg" value="mine" onChange={v => v === "templates" && navigate("/templates")}
+      items={[{ value: "mine", label: "Anketlerim" }, { value: "templates", label: "Şablonlar" }]} />
     <PageHead title="Anketlerim">
-      <ComingSoon><Button icon="template" disabled>Şablondan Oluştur</Button></ComingSoon>
+      <Button icon="template" to="/templates">Şablondan Oluştur</Button>
     </PageHead>
     <div className="toolbar">
       <SearchInput value={q} placeholder="Anket ara..." onSearch={v => update({ q: v })} />
