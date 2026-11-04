@@ -291,12 +291,13 @@ Katılımcı seçimi ve davet oluşturma API-25a ve API-26, mail takibi ve yenid
 | API-71 | PUT | `/surveys/{surveyId}/email-templates/{type}` | Konu/gövde özelleştir | FR-46 |
 | API-72 | POST | `/surveys/{surveyId}/email-templates/{type}/preview` | Değişkenler doldurulmuş önizleme | FR-46 |
 
-### 2.8 Katılımcı Formu — Public (S-08, S-09, S-10)
+### 2.8 Katılımcı (User) (S-08, S-09, S-10)
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
-| API-80 | GET | `/public/surveys/{token}` | Token doğrula; form + taslak yanıtlar + kaldığı soru. Hata: geçersiz/iptal, süresi doldu, zaten yanıtlandı | FR-60, FR-65, AS-01–03 |
-| API-81 | PUT | `/public/surveys/{token}/draft` | Ara kayıt (sayfa geçişinde) | FR-63, AS-02 |
-| API-82 | POST | `/public/surveys/{token}/submit` | Zorunlu alan kontrolü, yanıtı kesinleştir, tokenı tüket | FR-62, FR-64, BR-01–03 |
+| API-79 | POST | `/user/auth/login` | Davet token'ını ankete bağlı katılımcı token'ına çevirir (`exp` = anket bitişi, refresh yok). Hata: geçersiz/iptal 401, süresi doldu/kapalı 410, zaten yanıtlandı 409 | FR-60, FR-65, AS-01–03 |
+| API-80 | GET | `/user/surveys/{surveyId}` | Anket formu (yalnızca token'ın anketi); erişim kuralları her istekte yeniden uygulanır | FR-60, FR-61, FR-67 |
+| API-81 | PUT | `/user/surveys/{surveyId}/draft` | Ara kayıt (henüz yok) | FR-63, AS-02 |
+| API-82 | POST | `/user/surveys/{surveyId}/submit` | Zorunlu alan kontrolü, yanıtı kesinleştir, daveti tüket (henüz yok) | FR-62, FR-64, BR-01–03 |
 
 ### 2.9 Raporlama ve Dışa Aktarım (S-07)
 | ID | Metot | Yol | Açıklama | Ref |

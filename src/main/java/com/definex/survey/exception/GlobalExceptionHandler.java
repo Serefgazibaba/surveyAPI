@@ -33,6 +33,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetailFactory.create(ex.getStatus(), ex.getCode(), ex.getMessage(), null, ex.getErrors());
     }
 
+    /** Katılımcı hata sayfası (S-10) için anket başlığı ve iletişim bilgisi eklenir. */
+    @ExceptionHandler(UserAccessException.class)
+    public ProblemDetail handleUserAccess(UserAccessException ex) {
+        ProblemDetail problem = handleApiException(ex);
+        problem.setProperty(UserAccessException.SURVEY_TITLE, ex.getSurveyTitle());
+        problem.setProperty(UserAccessException.CONTACT_INFO, null);
+        return problem;
+    }
+
     @ExceptionHandler(AccountLockedException.class)
     public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException ex) {
         return ResponseEntity.status(ex.getStatus())

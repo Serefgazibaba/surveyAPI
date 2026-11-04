@@ -55,6 +55,13 @@ public class Invitation extends BaseEntity {
         this.invitedAt = invitedAt;
     }
 
+    /** Katılımcı davet linkiyle ilk kez giriş yaptı; sonraki girişlerde değişmez. */
+    public void markStarted() {
+        if (status == InvitationStatus.PENDING) {
+            this.status = InvitationStatus.STARTED;
+        }
+    }
+
     /** Yeniden gönderimde yeni token; eski link geçersiz olur. */
     public void rotateToken(String newTokenHash) {
         this.tokenHash = newTokenHash;
