@@ -79,10 +79,10 @@ com.definex.survey
 ├─ exception/   GlobalExceptionHandler, ProblemDetailFactory, ApiException ve alt sınıfları
 ├─ mail/        e-posta altyapısı: email_messages, JavaMailSender, MailService (anket/davet bilmez)
 ├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
-├─ auth/        /admin/auth/*, /user/auth/*, /admin/getAllUsers
+├─ auth/        /admin/auth/*, /admin/getAllUsers
 ├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey, /admin/getMails, /admin/resendMails
 ├─ report/      /admin/surveys/{surveyId}/report*
-└─ user/        katılımcı tarafı: /user/surveys/* (form, ara kayıt, yanıt gönderimi)
+└─ user/        katılımcı tarafı: /user/auth/login (davet token'ı ile), /user/surveys/* (form; ara kayıt ve gönderim sonraki adım)
 ```
 
 Her iş modülü aynı alt paketleri taşır: `controller/ service/ repository/ entity/ dto/`.
@@ -279,6 +279,38 @@ Uygun olmayan bir mail seçilirse hiçbiri gönderilmez (`422 MAILS_NOT_RESENDAB
 `dev-users.sql` içindeki katılımcıların adresleri sahte olduğundan onlara mail gitmez veya yanlış kişiye gidebilir.
 Gerçek kişileri **git'e eklenmeyen** `src/main/resources/db/seed/local-users.sql` dosyasına ekleyin
 (şablon: `local-users.sql.example`). Dev profilinde dosya varsa her açılışta çalıştırılır.
+
+## Katılımcı akışı (User)
+
+Katılımcı şifre girmez; davet mailindeki kişiye özel link (`{FRONTEND_BASE_URL}/s/{invitationToken}`) kimlik yerine
+geçer. Ön yüz linkteki token'ı login ucuna gönderir; hangi anket olduğu sunucu tarafından davet kaydından bulunur.
+
+```bash
+# 1. Davet token'ını katılımcı token'ına çevir → accessToken + surveyId + surveyTitle
+curl -s -X POST http://localhost:8080/api/v1/user/auth/login \
+  -H "Content-Type: application/json" -d '{"invitationToken":"<linkteki token>"}'
+
+# 2. Anket formu (yalnızca token'ın bağlı olduğu anket)
+curl -s http://localhost:8080/api/v1/user/surveys/<surveyId> -H "Authorization: Bearer <accessToken>"
+```
+
+- **Token:** `sub` = kullanıcı, `roles` = `[USER]`, `inv` = davet, `svy` = anket, `exp` = **anketin bitiş tarihi**.
+  Refresh yoktur; token kaybolursa katılımcı maildeki linke tekrar tıklar.
+- **Erişim kuralları** login'de ve her `/user/**` isteğinde DB'den yeniden kontrol edilir (JWT geçerli olsa bile):
+
+| Durum | HTTP | `code` |
+|---|---|---|
+| Token bulunamadı veya davet iptal | 401 | `INVALID_INVITATION` |
+| Bitiş tarihi geçti | 410 | `SURVEY_EXPIRED` |
+| Anket kapatıldı / arşivlendi | 410 | `SURVEY_CLOSED` |
+| Yanıt zaten gönderildi | 409 | `ALREADY_RESPONDED` |
+
+Hata yanıtları hata sayfası için `surveyTitle` taşır. Davet yeniden gönderilirse eski link 401 alır; daha önce
+alınmış katılımcı token'ı davete bağlı olduğu için çalışmaya devam eder.
+
+**Ön yüz notları:** Login'den sonra token'ı URL'den temizleyin (`history.replaceState`) ve sayfaya
+`<meta name="referrer" content="no-referrer">` ekleyin; davet token'ı şifre yerine geçer. Katılımcı token'ı ve
+`surveyId` `sessionStorage`'da tutulabilir.
 
 ## Hata yanıtı örnekleri
 

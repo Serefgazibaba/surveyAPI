@@ -15,10 +15,11 @@ info:
     İki token birbirinin uçlarında geçersizdir. Admin token'ı `/user/*`, user token'ı `/admin/*` uçlarında `401` döner.
 
     **Katılımcı akışı**
-    1. Katılımcı e-postadaki kişiye özel linke tıklar (`https://{host}/s/{invitationToken}`).
-    2. Ön yüz linkteki davet tokenını `POST /user/auth/login` ile kısa ömürlü bir oturum token'ına çevirir.
-       Davet tokenı yalnızca bu uçta kullanılır, diğer isteklerde dolaşmaz.
-    3. `GET /user/surveys/{surveyId}` formu ve varsa ara kayıtları getirir (kaldığı yerden devam).
+    1. Katılımcı davet mailindeki kişiye özel linke tıklar (`{FRONTEND_BASE_URL}/s/{invitationToken}`).
+    2. Ön yüz linkteki davet tokenını `POST /user/auth/login` ile ankete bağlı bir katılımcı token'ına çevirir
+       ve token'ı URL'den temizler. Davet tokenı yalnızca bu uçta kullanılır, diğer isteklerde dolaşmaz.
+       Refresh yoktur: katılımcı token'ı anketin bitiş tarihine kadar geçerlidir; kaybolursa link ile yeniden giriş yapılır.
+    3. `GET /user/surveys/{surveyId}` formu getirir (`surveyId` login yanıtından gelir).
     4. Sayfa geçişlerinde `PUT /user/surveys/{surveyId}/draft` ile ara kayıt yapılır.
     5. `POST /user/surveys/{surveyId}/submit` yanıtı kesinleştirir. Davet tokenı **bu anda** tüketilir (BR-02) ve
        oturum kapanır. Aynı linkle tekrar girişte `ALREADY_RESPONDED` döner.
@@ -785,16 +786,24 @@ paths:
       operationId: userLogin
       summary: Katılımcı girişi (davet tokenı ile)
       description: |
-        E-postadaki kişiye özel linkte yer alan davet tokenını, tek bir davete ve ankete bağlı kısa ömürlü
-        bir oturum token'ına çevirir (FR-60). Katılımcı hesap açmaz, şifre girmez.
+        Davet mailindeki linkte yer alan davet tokenını, tek bir davete ve ankete bağlı katılımcı token'ına çevirir
+        (FR-60). Katılımcı hesap açmaz, şifre girmez; davet tokenı kimlik yerine geçer.
 
-        - Sunucu davet tokenının hash'ini arar (NFR-02). Bulunamazsa ya da davet iptal edildiyse `401`.
-        - Anket `EXPIRED` veya `CLOSED` ise `410`; yanıt zaten gönderildiyse `409` döner (FR-64, FR-65).
-        - Davet ilk kez açılıyorsa durumu `SENT` → `STARTED` olur. Davet tokenı burada **tüketilmez**;
+        - Sunucu davet tokenının hash'ini arar (NFR-02); davet, katılımcı ve anket bu kayıttan bulunur.
+        - Token **anketin bitiş tarihine kadar** geçerlidir (`exp` = `endsAt`). Refresh yoktur.
+          JWT claim'leri: `sub` = kullanıcı, `roles` = `[USER]`, `inv` = davet, `svy` = anket.
+        - Davet ilk kez açılıyorsa `PENDING` → `STARTED` olur. Davet tokenı burada **tüketilmez**;
           katılımcı gönderime kadar aynı linkle tekrar girebilir (BR-02).
-        - Kaba kuvvet denemelerine karşı IP bazlı oran sınırlaması uygulanır (NFR-03).
 
-        Hata yanıtlarında `contactInfo` alanı anket sahibinin iletişim bilgisini taşır (S-10).
+        **Erişim kuralları** (burada ve her `/user/**` isteğinde aynı; JWT geçerli olsa bile DB'den yeniden kontrol edilir)
+        | Durum | HTTP | `code` |
+        |---|---|---|
+        | Token bulunamadı veya davet iptal | 401 | `INVALID_INVITATION` |
+        | Bitiş tarihi geçti veya anket `EXPIRED` | 410 | `SURVEY_EXPIRED` |
+        | Anket `CLOSED` / `ARCHIVED` | 410 | `SURVEY_CLOSED` |
+        | Yanıt zaten gönderildi | 409 | `ALREADY_RESPONDED` |
+
+        Hata yanıtları hata sayfası (S-10) için `surveyTitle` taşır (davet bulunamadıysa boş). `contactInfo` ileride dolacak.
       security: []
       requestBody:
         required: true
@@ -810,7 +819,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserAuthTokenResponse'
+                $ref: '#/components/schemas/UserLoginResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -828,40 +837,6 @@ paths:
           $ref: '#/components/responses/AlreadyResponded'
         '410':
           $ref: '#/components/responses/SurveyNotAvailable'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-
-  /user/auth/refresh:
-    post:
-      tags: [User - Auth]
-      operationId: userRefreshToken
-      summary: Katılımcı oturumunu yenile
-      description: |
-        Katılımcı formu uzun süre açık kaldığında oturumu yeniler. Refresh token tek kullanımlıktır (rotation).
-        Anket süresi dolduysa (`410`), yanıt gönderildiyse (`409`) veya davet iptal edildiyse (`401`) yenileme yapılmaz.
-        Refresh token da süresi dolmuşsa katılımcı aynı davet linkiyle tekrar giriş yapabilir.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefreshRequest'
-      responses:
-        '200':
-          description: Yeni token çifti
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserAuthTokenResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/SessionExpired'
-        '409':
-          $ref: '#/components/responses/AlreadyResponded'
-        '410':
-          $ref: '#/components/responses/SurveyNotAvailable'
 
   /user/surveys/{surveyId}:
     parameters:
@@ -873,9 +848,10 @@ paths:
       description: |
         Katılımcının dolduracağı formu döner (FR-60, FR-61). Admin'e özel alanlar (katılımcı sayısı, aksiyonlar,
         sürüm vb.) yer almaz.
-        - `draft` alanı varsa katılımcı kaldığı yerden devam eder (FR-63, AS-02).
+        - `draft` alanı ara kayıt uçlarıyla birlikte dolacak (FR-63, AS-02); şimdilik `null`.
         - Anonim modda `anonymousNotice` formun başında gösterilir (FR-67).
-        - `surveyId` oturum token'ının bağlı olduğu anketle eşleşmezse `404` döner.
+        - `surveyId` katılımcı token'ının bağlı olduğu anketle (`svy`) eşleşmezse `404` döner.
+        - Erişim kuralları login ile aynıdır (409 / 410 / 401).
       security:
         - userAuth: []
       responses:
@@ -1016,8 +992,9 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        `/user/auth/login` ile alınan katılımcı token'ı. Kişisel veri taşımaz; yalnızca davete ve ankete bağlıdır
-        (`sub` = davet kimliği, `sid` = anket kimliği, `aud` = `survey-user`). Yalnızca `/user/*` uçlarında geçerlidir.
+        `POST /user/auth/login` ile alınan katılımcı token'ı. Kişisel veri taşımaz; yalnızca davete ve ankete bağlıdır
+        (`sub` = kullanıcı id'si, `roles` = `[USER]`, `inv` = davet id'si, `svy` = anket id'si, `exp` = anketin bitiş
+        tarihi). Yalnızca `/user/*` uçlarında ve yalnızca `svy` anketi için geçerlidir; refresh yoktur.
 
   parameters:
     SurveyId:
@@ -1281,24 +1258,42 @@ components:
       properties:
         invitationToken:
           type: string
-          minLength: 22
+          minLength: 1
           maxLength: 256
-          description: E-postadaki kişiye özel linkte yer alan davet tokenı (≥128 bit rastgele)
-    UserAuthTokenResponse:
-      description: Refresh token en geç anketin bitiş tarihine kadar geçerlidir
-      allOf:
-        - $ref: '#/components/schemas/TokenPair'
-        - type: object
-          required: [surveyId, invitationStatus]
-          properties:
-            surveyId:
-              type: string
-              format: uuid
-              description: Ön yüzün `GET /user/surveys/{surveyId}` çağrısı için kullanacağı anket kimliği
-            invitationStatus:
-              type: string
-              enum: [STARTED]
-              description: Girişten sonra davet durumu
+          description: Davet linkindeki token (`{FRONTEND_BASE_URL}/s/{invitationToken}`; 256 bit rastgele)
+    UserLoginResponse:
+      type: object
+      description: Katılımcı oturumu. Refresh token yoktur; token anketin bitiş tarihine kadar geçerlidir.
+      required: [accessToken, tokenType, expiresIn, expiresAt, surveyId, surveyTitle, invitationStatus]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          description: Token'ın kalan ömrü (saniye)
+        expiresAt:
+          type: string
+          format: date-time
+          description: Anketin bitiş tarihi (`endsAt`)
+        surveyId:
+          type: string
+          format: uuid
+          description: Ön yüzün `GET /user/surveys/{surveyId}` çağrısı için kullanacağı anket kimliği
+        surveyTitle:
+          type: string
+        invitationStatus:
+          $ref: '#/components/schemas/InvitationStatus'
+      example:
+        accessToken: eyJhbGciOiJIUzI1NiJ9...
+        tokenType: Bearer
+        expiresIn: 2246400
+        expiresAt: '2026-11-30T21:00:00Z'
+        surveyId: 9a7d3c21-4b8e-4f0a-a1c2-7e5d9b3f2a68
+        surveyTitle: Test Anketi - Mail Akışı
+        invitationStatus: STARTED
 
     # ---------- Admin Survey ----------
     SurveyStatus:
@@ -2012,7 +2007,7 @@ components:
           allOf:
             - $ref: '#/components/schemas/UserDraft'
           nullable: true
-          description: Daha önce ara kayıt yapıldıysa dolu döner
+          description: Ara kayıt (draft uçlarıyla birlikte dolacak; şimdilik null)
     UserQuestion:
       type: object
       required: [id, number, text, type, required, settings]

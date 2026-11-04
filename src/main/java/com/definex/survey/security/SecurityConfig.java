@@ -28,8 +28,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_AUTH_ENDPOINTS = {
             "/admin/auth/login",
             "/admin/auth/refresh",
-            "/user/auth/login",
-            "/user/auth/refresh"
+            "/user/auth/login"
     };
 
     /** Swagger UI ve OpenAPI dokümanı; yalnızca {@code springdoc.api-docs.enabled=true} iken (dev) açılır. */

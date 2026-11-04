@@ -28,14 +28,22 @@ public class JwtTokenService {
     }
 
     /**
-     * @param subject     admin için kullanıcı id'si, katılımcı için davet id'si
+     * Varsayılan ömürlü ({@code accessTokenTtl}) token.
+     *
+     * @param subject     kullanıcı id'si
      * @param roles       {@link Roles} sabitleri
-     * @param extraClaims ek claim'ler (ör. katılımcı için {@code sid} = anket id'si); boş olabilir
+     * @param extraClaims ek claim'ler (ör. admin için {@code sid} = oturum id'si); boş olabilir
      */
     public AccessToken issueAccessToken(String subject, Collection<String> roles, Map<String, Object> extraClaims) {
-        Instant now = Instant.now();
-        Instant expiresAt = now.plus(properties.accessTokenTtl());
+        return issueAccessToken(subject, roles, extraClaims, Instant.now().plus(properties.accessTokenTtl()));
+    }
 
+    /**
+     * Bitiş zamanı dışarıdan verilen token (ör. katılımcı token'ı anketin bitiş tarihine kadar geçerlidir).
+     */
+    public AccessToken issueAccessToken(String subject, Collection<String> roles, Map<String, Object> extraClaims,
+                                        Instant expiresAt) {
+        Instant now = Instant.now();
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(properties.issuer())
                 .subject(subject)
@@ -46,7 +54,7 @@ public class JwtTokenService {
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(header, claims.build())).getTokenValue();
-        return new AccessToken(token, expiresAt, properties.accessTokenTtl().toSeconds());
+        return new AccessToken(token, expiresAt, Math.max(0, expiresAt.getEpochSecond() - now.getEpochSecond()));
     }
 
     public record AccessToken(String value, Instant expiresAt, long expiresInSeconds) {
