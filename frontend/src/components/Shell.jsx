@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import Icon from "./Icon.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { useNotificationCount } from "../hooks/useNotifications.js";
@@ -20,10 +20,11 @@ function NavItem({ to, icon, label, badge }) {
   const { pathname } = useLocation();
   const active = to === "/surveys" ? pathname.startsWith("/surveys") && pathname !== "/surveys/new"
     : PREFIX_ACTIVE.includes(to) ? pathname.startsWith(to) : pathname === to;
-  return <NavLink to={to} className={`nav-item${active ? " active" : ""}`}>
+  // NavLink kullanılmaz: kendi önek eşleşmesiyle "active" ekler (/surveys, /surveys/new'de de aktif görünürdü).
+  return <Link to={to} className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
     <Icon name={icon} />{label}
     {badge > 0 && <span className="nav-badge" aria-label={`${badge} yeni`}>{badge > 99 ? "99+" : badge}</span>}
-  </NavLink>;
+  </Link>;
 }
 
 /** Admin sayfa iskeleti: sol menü (ekran yüksekliğinde, sabit) + içerik. */
