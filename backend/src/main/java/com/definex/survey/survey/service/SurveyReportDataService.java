@@ -42,14 +42,14 @@ public class SurveyReportDataService {
         return result;
     }
 
-    /** Davet → kullanıcı (yalnızca kayıtlı moddaki yanıtlar için anlamlıdır). */
+    /** Davet → katılımcı (yalnızca kayıtlı moddaki yanıtlar için anlamlıdır). */
     @Transactional(readOnly = true)
     public Map<UUID, UUID> participantsByInvitation(Collection<UUID> invitationIds) {
         Map<UUID, UUID> result = new HashMap<>();
         if (invitationIds.isEmpty()) {
             return result;
         }
-        invitationRepository.findUserIds(invitationIds).forEach(row -> result.put((UUID) row[0], (UUID) row[1]));
+        invitationRepository.findParticipantIds(invitationIds).forEach(row -> result.put((UUID) row[0], (UUID) row[1]));
         return result;
     }
 

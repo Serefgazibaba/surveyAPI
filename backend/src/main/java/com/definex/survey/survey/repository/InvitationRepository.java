@@ -42,7 +42,7 @@ public interface InvitationRepository extends JpaRepository<Invitation, UUID> {
             """)
     List<SurveyCount> countBySurveyIds(@Param("surveyIds") Collection<UUID> surveyIds);
 
-    /** Rapor: davet → kullanıcı eşlemesi (kayıtlı modda katılımcı adı için). Satır: [invitationId, userId]. */
-    @Query("select i.id, i.userId from Invitation i where i.id in :ids")
-    List<Object[]> findUserIds(@Param("ids") Collection<UUID> ids);
+    /** Rapor: davet → katılımcı eşlemesi (kayıtlı modda katılımcı adı için). Satır: [invitationId, participantId]. */
+    @Query("select i.id, i.participantId from Invitation i where i.id in :ids")
+    List<Object[]> findParticipantIds(@Param("ids") Collection<UUID> ids);
 }

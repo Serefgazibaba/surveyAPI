@@ -8,7 +8,7 @@ import java.util.UUID;
 /** Katılımcı erişim kontrolü için davet ve anket özeti (survey modülünün dışa açtığı salt okunur görünüm). */
 public record InvitationContext(
         UUID invitationId,
-        UUID userId,
+        UUID participantId,
         UUID surveyId,
         String surveyTitle,
         SurveyStatus surveyStatus,

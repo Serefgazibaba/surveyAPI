@@ -4,9 +4,9 @@ import java.util.UUID;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 /**
- * Katılımcı JWT'sinin içeriği: {@code sub} = kullanıcı, {@code inv} = davet, {@code svy} = anket.
+ * Katılımcı JWT'sinin içeriği: {@code sub} = katılımcı (participants.id), {@code inv} = davet, {@code svy} = anket.
  */
-public record ParticipantPrincipal(UUID userId, UUID invitationId, UUID surveyId) {
+public record ParticipantPrincipal(UUID participantId, UUID invitationId, UUID surveyId) {
 
     public static final String INVITATION_CLAIM = "inv";
     public static final String SURVEY_CLAIM = "svy";

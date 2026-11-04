@@ -22,7 +22,8 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 | T07 | `question_options`        | Seçimli soruların seçenekleri                                        | MVP    | FR-22, 4.4                |
 | T08 | `survey_shares`           | Anketin başka Admin’lerle paylaşımı / ortak sahiplik                 | F2     | BR-09, Q-07               |
 | T09 | `templates`               | Yeniden kullanılabilir anket iskeleti (soru snapshot'ı, kişisel)     | MVP    | FR-30, FR-31              |
-| T12 | `invitations`             | Kullanıcı (USER) ↔ anket davet kaydı, token hash, davet durumu       | MVP    | FR-42–45, 3.3             |
+| T10 | `participants`            | Davet edilen kişi: kayıtlı kullanıcı veya ad + e-postayla eklenen dış kişi | MVP | FR-40, NFR-06 |
+| T12 | `invitations`             | Katılımcı ↔ anket davet kaydı, token hash, davet durumu              | MVP    | FR-42–45, 3.3             |
 | T13 | `response_drafts`         | Gönderim öncesi ara kayıt (davete bağlı)                             | MVP    | FR-63, AS-02, BR-06       |
 | T14 | `responses`               | Kesinleşmiş (gönderilmiş) yanıt                                      | MVP    | BR-01, BR-06              |
 | T15 | `answers`                 | Soru bazlı yanıt değeri                                              | MVP    | FR-71–73                  |
@@ -136,14 +137,25 @@ survey_id FK, user_id FK, role (`CO_OWNER`, `VIEWER`), created_at. PK (survey_id
 şablon silmek anketleri etkilemez (FR-31). Şablona katılımcı, bitiş tarihi, yanıt modu ve yanıt girmez (FR-30).
 Paylaşım (`visibility`, FR-32) F2'ye bırakıldı.
 
-> Ayrı bir katılımcı tablosu yoktur: katılımcılar `users` tablosundaki `role = USER` kullanıcılardır (T01). CSV içe aktarım ileride gerekirse `users` üzerinden tasarlanacak.
+#### T10 `participants`
+| Kolon | Tip | Not |
+|---|---|---|
+| id | uuid PK | katılımcı token'ının `sub` değeri |
+| email | string(254) UNIQUE | küçük harfe çevrilmiş; aynı e-posta tek katılımcı |
+| full_name | string(200) | ilk eklendiği andaki ad; sonradan eklemelerde değişmez |
+| user_id | uuid NULL UNIQUE | `users.id`; kişi uygulamada kayıtlı bir USER ise dolu (modül sınırı nedeniyle JPA ilişkisi yok) |
+| created_at / updated_at | timestamp | |
+
+Katılımcı iki yoldan oluşur: kayıtlı kullanıcılar listesinden seçilerek (`user_id` dolu) veya yayınlarken ad + e-posta ile
+(dış kişi). Elle girilen adres aktif bir USER hesabına aitse o kullanıcıya bağlanır. Katılımcı hesap açmaz, şifresi yoktur;
+davet linkiyle girer (FR-60). CSV içe aktarım (FR-41) bu tablo üzerinden yapılacak.
 
 #### T12 `invitations`
 | Kolon | Tip | Not |
 |---|---|---|
 | id | uuid PK | |
 | survey_id | uuid FK → surveys | |
-| user_id | uuid | `users.id` (role = USER); modül sınırı nedeniyle JPA ilişkisi yok. UNIQUE (survey_id, user_id) — FR-40 |
+| participant_id | uuid | `participants.id`; modül sınırı nedeniyle JPA ilişkisi yok. UNIQUE (survey_id, participant_id) — FR-40 |
 | token_hash | string UNIQUE | davete özel 256 bit token'ın SHA-256'sı; ham token saklanmaz (NFR-02) |
 | status | enum | `PENDING` (oluşturuldu), `STARTED` (giriş yapıldı), `COMPLETED` (yanıt gönderildi), `CANCELLED` |
 | invited_at | timestamp | |
@@ -215,7 +227,7 @@ key PK, value (json), updated_by, updated_at. Örnek anahtarlar: `mail.provider`
 ```
 users 1─N surveys 1─N questions 1─N question_options
 users 1─N templates
-surveys 1─N invitations N─1 users (role = USER)
+surveys 1─N invitations N─1 participants 0..1─1 users (role = USER)
 invitations 1─0..1 response_drafts
 invitations 1─0..1 responses        (yalnız IDENTIFIED)
 surveys 1─N responses 1─N answers 1─N answer_options N─1 question_options
@@ -258,7 +270,7 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 | API-24 | DELETE | `/admin/surveys/{surveyId}` | Sil (yalnızca DRAFT) | BR-08 |
 | API-25 | POST | `/surveys/{surveyId}/duplicate` | Kopyala (katılımcı/yanıt hariç) | FR-11 |
 | API-25a | GET | `/admin/getAllUsers` | Davet edilebilecek kullanıcılar (USER, aktif); arama + sayfalama | FR-40 |
-| API-26 | POST | `/admin/publishSurvey` | Yayınla: `{surveyId, userIds[]}` → tamlık kontrolü, davet + davet maili oluştur, DRAFT → PUBLISHED; mailler commit sonrası arka planda gönderilir | FR-42, FR-22, FR-20 |
+| API-26 | POST | `/admin/publishSurvey` | Yayınla: `{surveyId, userIds[]?, participants[{fullName,email}]?}` (kayıtlı kullanıcılar ve/veya dış kişiler) → tamlık kontrolü, davet + davet maili oluştur, DRAFT → PUBLISHED; mailler commit sonrası arka planda gönderilir | FR-42, FR-22, FR-20 |
 | API-27 | POST | `/surveys/{surveyId}/close` | Manuel kapat | 3.2 |
 | API-28 | POST | `/surveys/{surveyId}/archive` | Arşivle | 3.2 |
 | API-29 | POST | `/surveys/{surveyId}/unarchive` | Geri al | 3.2 |

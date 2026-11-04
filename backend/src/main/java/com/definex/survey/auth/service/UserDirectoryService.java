@@ -8,6 +8,7 @@ import com.definex.survey.auth.entity.UserStatus;
 import com.definex.survey.auth.repository.UserRepository;
 import com.definex.survey.common.dto.PageMeta;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -54,15 +55,20 @@ public class UserDirectoryService {
                 .collect(Collectors.toMap(UserSummaryResponse::id, Function.identity()));
     }
 
-    /** Verilen id'lerdeki kullanıcılar (durumdan bağımsız; rapor pasifleşmiş katılımcının adını da gösterir). */
+    /**
+     * Verilen e-postalardan davet edilebilir (aktif USER) hesaplar; anahtar küçük harfli e-postadır.
+     * Elle girilen katılımcı adresi kayıtlı bir kullanıcıya aitse katılımcıyı o kullanıcıya bağlamak için kullanılır.
+     */
     @Transactional(readOnly = true)
-    public Map<UUID, UserSummaryResponse> findSummariesByIds(Collection<UUID> ids) {
-        if (ids.isEmpty()) {
+    public Map<String, UserSummaryResponse> findInvitableByEmails(Collection<String> emails) {
+        if (emails.isEmpty()) {
             return Map.of();
         }
-        return userRepository.findAllById(ids).stream()
+        List<String> lower = emails.stream().map(e -> e.toLowerCase(Locale.ROOT)).toList();
+        Specification<User> spec = invitable().and((root, query, cb) -> cb.lower(root.get("email")).in(lower));
+        return userRepository.findAll(spec).stream()
                 .map(UserSummaryResponse::from)
-                .collect(Collectors.toMap(UserSummaryResponse::id, Function.identity()));
+                .collect(Collectors.toMap(u -> u.email().toLowerCase(Locale.ROOT), Function.identity(), (a, b) -> a));
     }
 
     private static Specification<User> invitable() {
