@@ -106,3 +106,24 @@ html,body{margin:0}
 .time-24.has-error,.field.has-error .time-24{border-color:var(--danger)}
 .time-24:has(select:disabled){background:#F9FAFB;color:var(--muted)}
 .time-24 select:disabled{cursor:not-allowed}
+
+/* Türkçe tarih girişi + takvim */
+.date-input{position:relative;display:flex;align-items:center;height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;min-width:0}
+.date-input input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;padding:0 0 0 10px;font-variant-numeric:tabular-nums}
+.date-input-toggle{border:0;background:transparent;width:34px;height:100%;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
+.date-input-toggle .i{color:var(--muted)}
+.date-input:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px #1e4fd81f}
+.date-input.has-error,.field.has-error .date-input{border-color:var(--danger)}
+.date-input.disabled{background:#F9FAFB;color:var(--muted)}.date-input.disabled .date-input-toggle{cursor:not-allowed}
+.calendar{position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:272px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 28px #10182824;padding:12px}
+.calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.calendar-head b{font-size:14px}
+.calendar-head button{border:0;background:transparent;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;cursor:pointer}
+.calendar-head button:hover{background:#F2F4F7}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.calendar-dow{font-size:11px;color:var(--subtle);padding:4px 0;font-weight:600}
+.calendar-day{border:0;background:transparent;height:32px;border-radius:7px;cursor:pointer;font-variant-numeric:tabular-nums}
+.calendar-day:hover:not(:disabled){background:#F2F4F7}
+.calendar-day.today{color:var(--primary);font-weight:700}
+.calendar-day.selected{background:var(--primary);color:#fff}
+.calendar-day:disabled{color:#D0D5DD;cursor:not-allowed}

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { toZonedInput, fromZonedInput } from "../utils/datetime.js";
+import DateInput from "./DateInput.jsx";
+import { toZonedInput, fromZonedInput, todayYmd } from "../utils/datetime.js";
 
 const pad = n => String(n).padStart(2, "0");
 const HOURS = Array.from({ length: 24 }, (_, i) => pad(i));
@@ -7,7 +8,7 @@ const MINUTES = Array.from({ length: 60 }, (_, i) => pad(i));
 
 /**
  * Tarih + saat girişi. Değer UTC ISO string'dir; kullanıcı İstanbul saatiyle girer.
- * Saat 24 saat biçimindedir: tarayıcının yerel saat seçicisi (input type="time") işletim sistemi diline göre
+ * Tarih GG.AA.YYYY (DateInput), saat 24 saat biçimindedir: tarayıcının yerel saat seçicisi (input type="time") işletim sistemi diline göre
  * AM/PM gösterebildiği için saat ve dakika ayrı listelerden seçilir.
  * Saat otomatik doldurulmaz: tarih, saat ve dakika girilene kadar onChange(null) çağrılır;
  * yarım giriş bileşenin içinde korunur.
@@ -35,9 +36,8 @@ export default function DateTimeInput({ value, onChange, disabled, invalid = fal
     onChange?.(iso);
   };
 
-  const cls = invalid ? "has-error" : undefined;
   return <div className="two-inputs">
-    <input type="date" aria-label="Tarih" className={cls} value={local.date} disabled={disabled} onChange={e => update({ date: e.target.value })} />
+    <DateInput value={local.date} min={todayYmd()} invalid={invalid} disabled={disabled} onChange={date => update({ date })} />
     <div className={`time-24${invalid ? " has-error" : ""}`}>
       <select aria-label="Saat" value={local.hour} disabled={disabled} onChange={e => update({ hour: e.target.value })}>
         <option value="">SS</option>
