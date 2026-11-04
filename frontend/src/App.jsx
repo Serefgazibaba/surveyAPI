@@ -12,6 +12,9 @@ import MailsPage from "./pages/admin/MailsPage.jsx";
 import TemplateListPage from "./pages/admin/TemplateListPage.jsx";
 import ReportListPage from "./pages/admin/ReportListPage.jsx";
 import ReportPage from "./pages/admin/ReportPage.jsx";
+import NotificationsPage from "./pages/admin/NotificationsPage.jsx";
+import WhatsNewPage from "./pages/admin/WhatsNewPage.jsx";
+import PlaceholderPage from "./components/PlaceholderPage.jsx";
 import TemplateBuilderPage from "./pages/admin/TemplateBuilderPage.jsx";
 import InviteLandingPage from "./pages/participant/InviteLandingPage.jsx";
 import SurveyFormPage from "./pages/participant/SurveyFormPage.jsx";
@@ -46,6 +49,10 @@ export default function App() {
               <Route path="/mails" element={<MailsPage />} />
               <Route path="/templates" element={<TemplateListPage />} />
               <Route path="/reports" element={<ReportListPage />} />
+              <Route path="/dashboard" element={<PlaceholderPage title="Dashboard" icon="home" text="Aktif anketleriniz, yaklaşan bitiş tarihleri ve son yanıtlar burada özetlenecek." />} />
+              <Route path="/participant-lists" element={<PlaceholderPage title="Katılımcı Listeleri" icon="users" text="Sık kullanılan katılımcı gruplarını kaydedip anketlerde tekrar kullanabileceksiniz." />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/whats-new" element={<WhatsNewPage />} />
               <Route path="/reports/:surveyId" element={<ReportPage />} />
               <Route path="/templates/new" element={<TemplateBuilderRoute />} />
               <Route path="/templates/:id/edit" element={<TemplateBuilderRoute />} />
