@@ -1,5 +1,6 @@
-# Yerel geliştirme ortamı: PostgreSQL + API.
-#   Hepsi:          docker compose up --build
+# Yerel geliştirme ortamı: PostgreSQL + API + Ön yüz (nginx).
+#   Hepsi:          docker compose up --build        → http://localhost:3000
+#   Ön yüz hariç:   docker compose up --build api    (ön yüzü npm run dev ile çalıştırmak için)
 #   Yalnızca DB:    docker compose up -d postgres   (API'yi IDE / mvnw ile çalıştırmak için)
 # Değerler aynı klasördeki .env dosyasından okunur (.env.example'ı kopyalayın).
 services:
@@ -46,8 +47,18 @@ services:
       AUTH_SESSION_IDLE_TIMEOUT: ${AUTH_SESSION_IDLE_TIMEOUT:-30m}
       AUTH_MAX_FAILED_ATTEMPTS_PER_IP: ${AUTH_MAX_FAILED_ATTEMPTS_PER_IP:-5}
       AUTH_MAX_FAILED_ATTEMPTS_PER_ACCOUNT: ${AUTH_MAX_FAILED_ATTEMPTS_PER_ACCOUNT:-20}
+      # nginx arkasında gerçek istemci IP'si X-Forwarded-For'dan okunur (IP başına giriş kilidi için)
+      SERVER_FORWARD_HEADERS_STRATEGY: native
     ports:
       - "${SERVER_PORT:-8080}:8080"
+
+  frontend:
+    build: ./frontend
+    container_name: survey-frontend
+    depends_on:
+      - api
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
 
 volumes:
   survey-pgdata:

@@ -1,11 +1,13 @@
 # Survey API
 
-Survey Tool backend'i. Admin (anket sahibi) anket oluşturur, yayınlar ve raporlar. Katılımcı (User) e-postadaki
+Survey Tool backend'i ve ön yüzü ([`frontend/`](frontend/), React + Vite). Admin (anket sahibi) anket oluşturur, yayınlar ve raporlar. Katılımcı (User) e-postadaki
 davet linkiyle anketi doldurur. API sözleşmesi: [`docs/openapi/survey-api-docs-grup1.v1.yaml`](docs/openapi/survey-api-docs-grup1.v1.yaml).
 
 ## Teknoloji
 
-Java 21 · Spring Boot 3.5 · Maven (wrapper) · Spring Web, Validation, Data JPA, Security (OAuth2 Resource Server / JWT) · PostgreSQL 16 · springdoc-openapi (Swagger UI, yalnızca dev)
+**Backend:** Java 21 · Spring Boot 3.5 · Maven (wrapper) · Spring Web, Validation, Data JPA, Security (OAuth2 Resource Server / JWT) · PostgreSQL 16 · springdoc-openapi (Swagger UI, yalnızca dev)
+
+**Ön yüz:** React 19 · Vite · React Router; container'da nginx ile sunulur
 
 ## Hızlı başlangıç (tek komut)
 
@@ -16,14 +18,38 @@ cp .env.example .env          # değerleri doldurun (özellikle DB_PASSWORD ve J
 docker compose up --build
 ```
 
-PostgreSQL ve API birlikte ayağa kalkar. API adresi: `http://localhost:8080/api/v1`.
+PostgreSQL, API ve ön yüz birlikte ayağa kalkar.
+
+| Servis | Adres |
+|---|---|
+| Ön yüz | http://localhost:3000 (davet linkleri `/s/{token}` buraya açılır) |
+| API | http://localhost:8080/api/v1 (ön yüz de `/api/v1` isteklerini nginx üzerinden buraya iletir) |
+| PostgreSQL | `localhost:5432` |
 
 | Komut | Ne yapar |
 |---|---|
-| `docker compose up --build` | DB + API'yi derleyip başlatır |
+| `docker compose up --build` | DB + API + ön yüzü derleyip başlatır |
+| `docker compose up --build api` | DB + API (ön yüzü `npm run dev` ile çalıştırmak için) |
 | `docker compose up -d postgres` | Yalnızca DB (API'yi IDE'den çalıştırmak için) |
 | `docker compose down` | Durdurur (veri korunur) |
 | `docker compose down -v` | Durdurur ve DB verisini siler |
+
+## Ön yüz geliştirme
+
+Ön yüz kodu [`frontend/`](frontend/) altındadır. Container'daki sürüm `npm run build` çıktısıdır; anlık değişiklik
+(hot reload) için ön yüzü container dışında çalıştırın:
+
+```bash
+docker compose up -d --build api     # DB + API
+cd frontend
+npm install
+npm run dev                          # http://localhost:3000, /api istekleri localhost:8080'e proxy'lenir
+```
+
+Port 3000 hem container'daki ön yüz hem `npm run dev` tarafından kullanılır; ikisini aynı anda çalıştırmayın
+(`docker compose stop frontend`). Container'da ön yüz ile API aynı origin'den konuştuğu için CORS gerekmez.
+nginx istemcinin gerçek IP'sini `X-Forwarded-For` ile iletir (istemcinin gönderdiği değer atılır), API bunu giriş
+kilidi için kullanır.
 
 ## Swagger UI (yalnızca dev)
 
@@ -64,6 +90,7 @@ IntelliJ'de çalıştırırken Run Configuration → Environment variables alan�
 | `MAIL_FROM`, `MAIL_FROM_NAME` | | `MAIL_USERNAME`, `Survey Tool` | Gönderen adresi ve adı |
 | `SERVER_PORT` | | `8080` | HTTP portu |
 | `DB_NAME`, `DB_PORT` | | `survey`, `5432` | Yalnızca docker-compose için |
+| `FRONTEND_PORT` | | `3000` | Ön yüz container'ının portu (yalnızca docker-compose) |
 | `AUTH_SESSION_IDLE_TIMEOUT` | | `30m` | Son refresh'ten sonra oturumun düşeceği süre (FR-02) |
 | `AUTH_MAX_FAILED_ATTEMPTS_PER_IP` | | `5` | Aynı e-posta + IP için kilit eşiği (FR-01) |
 | `AUTH_MAX_FAILED_ATTEMPTS_PER_ACCOUNT` | | `20` | Bir e-posta için tüm IP'lerden toplam kilit eşiği |
@@ -73,6 +100,8 @@ Gizli bilgiler koda veya `application*.yml` dosyalarına yazılmaz. `.env` git'e
 ## Proje yapısı
 
 ```
+frontend/        ön yüz (React + Vite); Dockerfile + nginx.conf ile container'a alınır
+src/main/java/
 com.definex.survey
 ├─ config/      @ConfigurationProperties (JWT, Auth, CORS), CORS ve Clock bean'leri, OpenAPI
 ├─ security/    SecurityFilterChain, JWT encoder/decoder, JwtTokenService, Roles, 401/403 handler'ları
