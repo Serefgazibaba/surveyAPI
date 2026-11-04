@@ -55,6 +55,11 @@ public class Invitation extends BaseEntity {
         this.invitedAt = invitedAt;
     }
 
+    /** Yeniden gönderimde yeni token; eski link geçersiz olur. */
+    public void rotateToken(String newTokenHash) {
+        this.tokenHash = newTokenHash;
+    }
+
     public Survey getSurvey() {
         return survey;
     }

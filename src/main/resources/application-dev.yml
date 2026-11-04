@@ -14,7 +14,8 @@ spring:
   sql:
     init:
       mode: always
-      data-locations: classpath:db/seed/dev-users.sql
+      # local-users.sql gerçek kişileri içerir ve git'e eklenmez (bkz. local-users.sql.example)
+      data-locations: classpath:db/seed/dev-users.sql, optional:classpath:db/seed/local-users.sql
       encoding: UTF-8
 
 # Swagger UI: http://localhost:8080/api/v1/swagger-ui.html

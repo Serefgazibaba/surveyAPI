@@ -1,0 +1,10 @@
+-- Gerçek katılımcıları yerelde eklemek için bu dosyayı local-users.sql olarak kopyalayın (git'e eklenmez).
+-- Dev profilinde uygulama her açılışta çalıştırır; aynı e-posta varsa satır atlanır.
+--
+-- e-posta: küçük harf. role: USER. password_hash: katılımcı şifreyle giriş yapmaz; rastgele bir değerin BCrypt
+-- hash'ini yazın (ör. dev-users.sql'deki USER hash'lerinden biri de kullanılabilir).
+INSERT INTO users (id, full_name, email, password_hash, role, status, created_at, updated_at)
+VALUES
+    (gen_random_uuid(), 'Ad Soyad', 'ad.soyad@example.com',
+     '$2a$10$w0Ifqzu8ExSrwsGw//p73u.BvI3.hQ5BLhAhZ6vHkBlVYwkCwmJlu', 'USER', 'ACTIVE', now(), now())
+ON CONFLICT (email) DO NOTHING;

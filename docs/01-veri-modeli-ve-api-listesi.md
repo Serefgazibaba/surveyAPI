@@ -28,8 +28,8 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 | T15 | `answers`                 | Soru bazlı yanıt değeri                                              | MVP    | FR-71–73                  |
 | T16 | `answer_options`          | Seçimli sorularda seçilen seçenekler                                 | MVP    | FR-71                     |
 | T17 | `email_templates`         | Davet, hatırlatma vb. konu/gövde şablonları                          | MVP    | FR-46, Bölüm 9            |
-| T18 | `dispatches`              | Bir “Gönder / Hatırlat” toplu işlemi ve özeti                        | MVP    | FR-42–44, S-06            |
-| T19 | `email_messages`          | E-posta kuyruğu (outbox), deneme ve hata takibi                      | MVP    | NFR-10, NFR-21, NFR-42    |
+| T18 | `dispatches`              | Bir “Gönder / Hatırlat” toplu işlemi ve özeti (henüz yok)            | F2     | FR-42–44, S-06            |
+| T19 | `email_messages`          | Gönderilen/gönderilecek mailler, durum ve hata takibi                | MVP    | NFR-10, NFR-21, NFR-42    |
 | T20 | `export_jobs`             | CSV/PDF dışa aktarım işleri (asenkron)                               | MVP    | FR-73, NFR-13             |
 | T21 | `audit_logs`              | Admin işlemleri denetim kaydı                                        | MVP    | NFR-07                    |
 | T22 | `system_settings`         | Mail sağlayıcı, anonimlik eşiği, saklama süresi vb.                  | MVP    | NFR-21, BR-07, Q-05       |
@@ -167,7 +167,26 @@ id, survey_id FK NULL (NULL = sistem varsayılanı), type (`INVITATION`, `REMIND
 id, survey_id FK, type (`INITIAL`, `ADDITIONAL`, `REMINDER`, `DEADLINE_EXTENDED`, `RESEND`), status (`QUEUED`, `IN_PROGRESS`, `COMPLETED`), total_count, sent_count, failed_count, triggered_by (FK users NULL = otomatik), created_at, completed_at.
 
 #### T19 `email_messages`
-id, dispatch_id FK NULL, invitation_id FK NULL, type, recipient_email, subject, body_rendered, status (`QUEUED`, `SENDING`, `SENT`, `FAILED`, `BOUNCED`), attempt_count (max 3 — NFR-42), last_error, provider_message_id, next_attempt_at, sent_at, created_at.
+| Kolon | Tip | Not |
+|---|---|---|
+| id | uuid PK | |
+| type | enum | `SURVEY_INVITATION` |
+| owner_id | uuid | maili tetikleyen admin; listeleme ve sahiplik |
+| survey_id / invitation_id | uuid NULL | modül sınırı nedeniyle JPA ilişkisi yok |
+| recipient_email / recipient_name | string | |
+| subject | string | |
+| body_html / body_text | text NULL | **Yalnızca gönderim tamamlanana kadar** tutulur; `SENT`/`FAILED` olunca silinir (gövde davet token'ını içerir) |
+| status | enum | `QUEUED`, `SENDING`, `SENT`, `FAILED` |
+| attempt_count | int | ilk gönderim + yeniden gönderimler |
+| last_error | string NULL | kısaltılmış SMTP hatası; şifre veya token içermez |
+| last_attempt_at / sent_at | timestamp NULL | |
+| created_at / updated_at | timestamp | |
+
+Gönderim akışı:
+- Mail, publish ile aynı transaction'da `QUEUED` olarak yazılır. Commit sonrası arka planda **bir kez** gönderilir (`JavaMailSender`, SMTP).
+- Gönderim sonucu `SENT` veya `FAILED` olur. Otomatik yeniden deneme yoktur.
+- Admin `GET /admin/getMails` ile durumlara göre filtreler ve `POST /admin/resendMails` ile seçilenleri yeniden gönderir. Yeniden gönderimde davet token'ı yenilenir.
+- 10 dakikadan uzun süre `SENDING` durumunda kalan mail takılı sayılır ve yeniden gönderilebilir.
 
 #### T20 `export_jobs`
 id, survey_id FK, format (`CSV`, `PDF`), filters (json), status (`QUEUED`, `RUNNING`, `READY`, `FAILED`), file_location, expires_at, requested_by FK, created_at, completed_at.
@@ -187,7 +206,7 @@ surveys 1─N invitations N─1 users (role = USER)
 invitations 1─0..1 response_drafts
 invitations 1─0..1 responses        (yalnız IDENTIFIED)
 surveys 1─N responses 1─N answers 1─N answer_options N─1 question_options
-surveys 1─N dispatches 1─N email_messages N─0..1 invitations
+invitations 1─1 email_messages (davet maili; yeniden gönderim aynı kaydı kullanır)
 surveys 1─N email_templates | export_jobs | survey_shares
 ```
 
@@ -226,7 +245,7 @@ Taban yol: `/api/v1`. Admin uçları oturum gerektirir; `/public/*` uçları yal
 | API-24 | DELETE | `/admin/surveys/{surveyId}` | Sil (yalnızca DRAFT) | BR-08 |
 | API-25 | POST | `/surveys/{surveyId}/duplicate` | Kopyala (katılımcı/yanıt hariç) | FR-11 |
 | API-25a | GET | `/admin/getAllUsers` | Davet edilebilecek kullanıcılar (USER, aktif); arama + sayfalama | FR-40 |
-| API-26 | POST | `/admin/publishSurvey` | Yayınla: `{surveyId, userIds[]}` → tamlık kontrolü, davet oluştur, DRAFT → PUBLISHED; e-posta henüz yok, linkler yanıtta | FR-42, FR-22, FR-20 |
+| API-26 | POST | `/admin/publishSurvey` | Yayınla: `{surveyId, userIds[]}` → tamlık kontrolü, davet + davet maili oluştur, DRAFT → PUBLISHED; mailler commit sonrası arka planda gönderilir | FR-42, FR-22, FR-20 |
 | API-27 | POST | `/surveys/{surveyId}/close` | Manuel kapat | 3.2 |
 | API-28 | POST | `/surveys/{surveyId}/archive` | Arşivle | 3.2 |
 | API-29 | POST | `/surveys/{surveyId}/unarchive` | Geri al | 3.2 |
@@ -250,7 +269,7 @@ Sorular ve seçenekler ayrı uçlarla değil, anket kaydetme ucuyla (API-21) yö
 | API-54 | DELETE | `/templates/{templateId}` | Sil (türetilmiş anketler etkilenmez) | FR-31 |
 
 ### 2.6 Katılımcılar ve Davetler (S-05)
-Katılımcı seçimi ve davet oluşturma API-25a ve API-26 ile yapılır. Aşağıdaki uçlar ileride ele alınacak.
+Katılımcı seçimi ve davet oluşturma API-25a ve API-26, mail takibi ve yeniden gönderim API-67a ve API-67 ile yapılır. Diğer uçlar ileride ele alınacak.
 
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
@@ -261,7 +280,8 @@ Katılımcı seçimi ve davet oluşturma API-25a ve API-26 ile yapılır. Aşağ
 | API-64 | POST | `/surveys/{surveyId}/participant-imports` | CSV yükle → doğrulama özeti (geçerli/hatalı/tekrar) | FR-41, AS-05 |
 | API-65 | POST | `/surveys/{surveyId}/participant-imports/{importId}/confirm` | İçe aktarımı onayla | AS-05 |
 | API-66 | POST | `/surveys/{surveyId}/reminders` | Yanıtlamayanlara manuel hatırlatma | FR-44 |
-| API-67 | POST | `/surveys/{surveyId}/invitations/resend` | Hatalı/seçili davetleri yeniden gönder | 3.3 Hata |
+| API-67a | GET | `/admin/getMails` | Davet mailleri: `emailStatus`, `invitationStatus`, `surveyId`, `q` filtreleri; durum özeti | 3.3, S-06 |
+| API-67 | POST | `/admin/resendMails` | Seçilen gönderilemeyen mailleri yeni token'la yeniden gönder | 3.3 Hata |
 | API-68 | GET | `/surveys/{surveyId}/dispatches` + `/{dispatchId}` | Gönderim geçmişi ve özeti | S-06 |
 
 ### 2.7 E-posta Şablonları

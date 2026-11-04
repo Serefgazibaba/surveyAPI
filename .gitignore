@@ -22,3 +22,6 @@ Thumbs.db
 # Log
 *.log
 logs/
+
+# Gerçek kişileri içeren yerel seed (public repoya girmez)
+src/main/resources/db/seed/local-users.sql

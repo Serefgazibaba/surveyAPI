@@ -7,7 +7,11 @@ import com.definex.survey.exception.ApiException;
 import com.definex.survey.exception.FieldErrorItem;
 import com.definex.survey.exception.NotFoundException;
 import com.definex.survey.security.SecureTokenGenerator;
-import com.definex.survey.survey.dto.InvitationLinkResponse;
+import com.definex.survey.mail.entity.EmailType;
+import com.definex.survey.mail.service.EmailRequest;
+import com.definex.survey.mail.service.MailService;
+import com.definex.survey.mail.service.MailService.QueuedEmail;
+import com.definex.survey.survey.dto.InvitationSummaryResponse;
 import com.definex.survey.survey.dto.PublishSurveyRequest;
 import com.definex.survey.survey.dto.PublishSurveyResponse;
 import com.definex.survey.survey.entity.Invitation;
@@ -31,8 +35,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Anketi yayınlar: seçilen katılımcılar için davet oluşturur ve anketi {@code DRAFT} → {@code PUBLISHED} yapar.
- * Davet e-postası henüz gönderilmez; linkler yanıtta döner (geçici).
+ * Anketi yayınlar: seçilen katılımcılar için davet ve davet maili oluşturur, anketi {@code DRAFT} → {@code PUBLISHED}
+ * yapar. Mailler aynı transaction'da kaydedilir ve commit sonrası arka planda gönderilir. Davet linki yalnızca maille
+ * gider; yanıtta dönmez.
  */
 @Service
 public class SurveyPublishService {
@@ -44,16 +49,21 @@ public class SurveyPublishService {
     private final UserDirectoryService userDirectory;
     private final SecureTokenGenerator tokenGenerator;
     private final FrontendProperties frontend;
+    private final MailService mailService;
+    private final InvitationEmailComposer emailComposer;
     private final Clock clock;
 
     public SurveyPublishService(SurveyRepository surveyRepository, InvitationRepository invitationRepository,
                                 UserDirectoryService userDirectory, SecureTokenGenerator tokenGenerator,
-                                FrontendProperties frontend, Clock clock) {
+                                FrontendProperties frontend, MailService mailService,
+                                InvitationEmailComposer emailComposer, Clock clock) {
         this.surveyRepository = surveyRepository;
         this.invitationRepository = invitationRepository;
         this.userDirectory = userDirectory;
         this.tokenGenerator = tokenGenerator;
         this.frontend = frontend;
+        this.mailService = mailService;
+        this.emailComposer = emailComposer;
         this.clock = clock;
     }
 
@@ -74,20 +84,25 @@ public class SurveyPublishService {
 
         List<UserSummaryResponse> participants = resolveParticipants(request.userIds());
 
-        List<InvitationLinkResponse> links = new ArrayList<>();
+        List<InvitationSummaryResponse> invitations = new ArrayList<>();
         for (UserSummaryResponse user : participants) {
             String token = tokenGenerator.generate();
-            invitationRepository.save(new Invitation(survey, user.id(), tokenGenerator.hash(token), now));
+            Invitation invitation = invitationRepository.save(
+                    new Invitation(survey, user.id(), tokenGenerator.hash(token), now));
             String url = frontend.invitationUrl(token);
-            links.add(new InvitationLinkResponse(user.id(), user.email(), user.fullName(), url));
             if (frontend.logInvitationLinks()) {
                 log.info("Davet linki: survey={} user={} url={}", survey.getId(), user.email(), url);
             }
+            // Aynı transaction'da kaydedilir; commit edilince arka planda gönderilir.
+            QueuedEmail email = mailService.queue(new EmailRequest(EmailType.SURVEY_INVITATION, ownerId,
+                    survey.getId(), invitation.getId(), user.email(), user.fullName(),
+                    emailComposer.compose(user.fullName(), survey.getTitle(), survey.getEndsAt(), url)));
+            invitations.add(new InvitationSummaryResponse(user.id(), user.email(), user.fullName(), email.status()));
         }
         survey.publish(now);
 
         return new PublishSurveyResponse(survey.getId(), survey.getStatus(), survey.getPublishedAt(),
-                links.size(), links);
+                invitations.size(), invitations);
     }
 
     /** Tekrarları atar, sırayı korur; davet edilemeyen id'ler için istek dizisindeki konumla hata döner. */

@@ -10,5 +10,5 @@ public record PublishSurveyResponse(
         SurveyStatus status,
         Instant publishedAt,
         int invitationCount,
-        List<InvitationLinkResponse> invitations) {
+        List<InvitationSummaryResponse> invitations) {
 }
