@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 
 /**
- * Genel modal. Escape ve arka plana tıklama `onClose` çağırır (busy iken kapanmaz).
+ * Genel modal. × butonu ve Escape `onClose` çağırır (busy iken kapanmaz).
+ * Arka plana tıklamak kapatmaz: metin seçerken fare dışarıda bırakıldığında form yanlışlıkla kapanıyordu.
  * footer: alt butonlar; wide: geniş içerik için.
  */
 export default function Modal({ title, subtitle, children, footer, onClose, busy = false, wide = false }) {
@@ -10,8 +11,8 @@ export default function Modal({ title, subtitle, children, footer, onClose, busy
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, busy]);
-  return <div className="modal-backdrop" onClick={() => !busy && onClose?.()}>
-    <div className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
+  return <div className="modal-backdrop">
+    <div className={`modal${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
       <div className="modal-title">
         <div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
         <button type="button" aria-label="Kapat" onClick={() => !busy && onClose?.()}>×</button>
