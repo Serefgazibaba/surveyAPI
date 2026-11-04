@@ -1,6 +1,7 @@
 package com.definex.survey.survey.repository;
 
 import com.definex.survey.survey.entity.Invitation;
+import com.definex.survey.survey.entity.InvitationStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -11,6 +12,10 @@ import org.springframework.data.repository.query.Param;
 public interface InvitationRepository extends JpaRepository<Invitation, UUID> {
 
     long countBySurveyId(UUID surveyId);
+
+    long countBySurveyIdAndStatus(UUID surveyId, InvitationStatus status);
+
+    long countBySurveyIdAndStatusNot(UUID surveyId, InvitationStatus status);
 
     /** Liste ekranı için davet sayıları; tek sorguda. */
     @Query("""

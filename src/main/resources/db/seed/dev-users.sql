@@ -23,5 +23,51 @@ VALUES
     ('0a1b2c3d-0000-4000-8000-000000000102', 'Can Öztürk',    'can.ozturk@definex.com',
      '$2a$10$FjWFKn78RNTH9Ic8RhBh/Om6I16d/bhJ8lo2MZA40MkdQfx/eQby2', 'USER', 'ACTIVE', now(), now()),
     ('0a1b2c3d-0000-4000-8000-000000000103', 'Elif Şahin',    'elif.sahin@definex.com',
-     '$2a$10$/eO1uDXXAIodRXrbXxtKIek6tHsEuEee/eoVktOygvAZ0YVMmZrAm', 'USER', 'ACTIVE', now(), now())
+     '$2a$10$/eO1uDXXAIodRXrbXxtKIek6tHsEuEee/eoVktOygvAZ0YVMmZrAm', 'USER', 'ACTIVE', now(), now()),
+    ('0a1b2c3d-0000-4000-8000-000000000104', 'Deniz Akın',    'deniz.akin@definex.com',
+     '$2a$10$w0Ifqzu8ExSrwsGw//p73u.BvI3.hQ5BLhAhZ6vHkBlVYwkCwmJlu', 'USER', 'ACTIVE', now(), now()),
+    ('0a1b2c3d-0000-4000-8000-000000000105', 'Bora Kaya',     'bora.kaya@definex.com',
+     '$2a$10$FjWFKn78RNTH9Ic8RhBh/Om6I16d/bhJ8lo2MZA40MkdQfx/eQby2', 'USER', 'ACTIVE', now(), now())
 ON CONFLICT (email) DO NOTHING;
+
+-- Rapor endpointini geliştirme ortamında deneyebilmek için örnek yayınlanmış anket.
+-- 5 tamamlanmış davet içerir; anonimlik eşiği (5) böylece sağlanır.
+INSERT INTO surveys (id, owner_id, title, description, status, response_mode, ends_at,
+                     published_at, created_at, updated_at)
+VALUES
+    ('10000000-0000-4000-8000-000000000001',
+     '0a1b2c3d-0000-4000-8000-000000000001',
+     'Çalışan Memnuniyeti Anketi',
+     'Geliştirme ortamı örnek rapor verisi',
+     'PUBLISHED', 'IDENTIFIED', now() + interval '30 days',
+     now() - interval '2 days', now() - interval '2 days', now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO invitations (id, survey_id, user_id, token_hash, status, invited_at, completed_at, created_at, updated_at)
+VALUES
+    ('20000000-0000-4000-8000-000000000001',
+     '10000000-0000-4000-8000-000000000001',
+     '0a1b2c3d-0000-4000-8000-000000000101',
+     'dev-report-token-hash-001', 'COMPLETED', now() - interval '2 days', now() - interval '1 day',
+     now() - interval '2 days', now()),
+    ('20000000-0000-4000-8000-000000000002',
+     '10000000-0000-4000-8000-000000000001',
+     '0a1b2c3d-0000-4000-8000-000000000102',
+     'dev-report-token-hash-002', 'COMPLETED', now() - interval '2 days', now() - interval '20 hours',
+     now() - interval '2 days', now()),
+    ('20000000-0000-4000-8000-000000000003',
+     '10000000-0000-4000-8000-000000000001',
+     '0a1b2c3d-0000-4000-8000-000000000103',
+     'dev-report-token-hash-003', 'COMPLETED', now() - interval '2 days', now() - interval '10 hours',
+     now() - interval '2 days', now()),
+    ('20000000-0000-4000-8000-000000000004',
+     '10000000-0000-4000-8000-000000000001',
+     '0a1b2c3d-0000-4000-8000-000000000104',
+     'dev-report-token-hash-004', 'COMPLETED', now() - interval '1 day', now() - interval '8 hours',
+     now() - interval '1 day', now()),
+    ('20000000-0000-4000-8000-000000000005',
+     '10000000-0000-4000-8000-000000000001',
+     '0a1b2c3d-0000-4000-8000-000000000105',
+     'dev-report-token-hash-005', 'COMPLETED', now() - interval '1 day', now() - interval '4 hours',
+     now() - interval '1 day', now())
+ON CONFLICT (id) DO NOTHING;
