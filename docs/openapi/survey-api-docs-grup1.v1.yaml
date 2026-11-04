@@ -878,9 +878,21 @@ paths:
       operationId: userSaveDraft
       summary: Ara kayıt
       description: |
-        Katılımcının o ana kadarki yanıtlarını ara kayıt olarak saklar; her sayfa geçişinde çağrılır (FR-63).
-        Gönderilen `answers` mevcut taslağın **tamamını** değiştirir. Zorunlu soru kontrolü burada yapılmaz,
-        yalnızca değerlerin soru tipine uygunluğu kontrol edilir. Ara kayıtlar rapora dahil edilmez (BR-03).
+        Katılımcının o ana kadarki yanıtlarını ara kayıt olarak saklar; soru/sayfa geçişlerinde çağrılır (FR-63).
+        Gönderilen `answers` mevcut taslağın **tamamını** değiştirir. Zorunlu soru kontrolü burada yapılmaz.
+        Ara kayıt `GET /user/surveys/{surveyId}` yanıtındaki `draft` alanında döner (kaldığı yerden devam).
+        Ara kayıtlar rapora dahil edilmez (BR-03). Erişim kuralları login ile aynıdır (409 / 410 / 401).
+
+        **Cevap kuralları** (ara kayıt ve gönderim için aynı; ihlal → `422 INVALID_ANSWERS`, `errors[].field` = `answers[i]…`)
+        | Tip | Alanlar | Kural |
+        |---|---|---|
+        | `LIKERT` | `numericValue` | 1..`scale` |
+        | `SINGLE_CHOICE` | `optionIds` (≤1) veya `otherText` | seçenek bu soruya ait; `otherText` yalnızca `allowOther`; ikisi birlikte olamaz |
+        | `MULTIPLE_CHOICE` | `optionIds` + `otherText` | seçenekler bu soruya ait ve tekrarsız; toplam seçim `minSelect`..`maxSelect` ("Diğer" dahil) |
+        | `FREE_TEXT` | `text` | ≤ `maxLength` |
+
+        `questionId` ankette olmalı ve bir kez gelmeli; tipe ait olmayan alan dolu olamaz. Hiçbir alanı dolu olmayan
+        cevap yanıtlanmamış sayılır.
       security:
         - userAuth: []
       requestBody:
@@ -911,6 +923,8 @@ paths:
           $ref: '#/components/responses/AlreadyResponded'
         '410':
           $ref: '#/components/responses/SurveyNotAvailable'
+        '422':
+          $ref: '#/components/responses/InvalidAnswers'
 
   /user/surveys/{surveyId}/submit:
     parameters:
@@ -922,15 +936,28 @@ paths:
       description: |
         Yanıtı kesinleştirir (FR-64).
         - `answers` nihai yanıtların **tamamıdır**; ara kayıtla birleştirilmez.
-        - Zorunlu sorular yanıtlanmadıysa `422` döner; `errors[].field` eksik sorunun `questionId`'sini taşır (FR-62).
-        - Başarılı gönderimde davet `COMPLETED` olur, davet tokenı tüketilir ve oturum token'ları iptal edilir (BR-01, BR-02).
-        - Anonim modda yanıt ile davet arasında ilişki tutulmaz; ara kayıt silinir (BR-06).
+        - Önce değerler kontrol edilir (`422 INVALID_ANSWERS`), ardından zorunlu sorular
+          (`422 REQUIRED_ANSWERS_MISSING`; `errors[].field` eksik sorunun `questionId`'si, FR-62).
+        - Başarılı gönderimde davet `COMPLETED` olur ve ara kayıt silinir. Bu link ve daha önce alınmış katılımcı
+          token'ı ile sonraki her istek `409 ALREADY_RESPONDED` alır (BR-01, BR-02).
+        - **Anonim modda** (BR-06) yanıt davetle ilişkilendirilmez ve gönderim zamanı saat başına yuvarlanır; böylece
+          davetin tamamlanma zamanıyla eşleştirilip kişi tahmin edilemez. Kayıtlı modda yanıt davete bağlıdır.
         - Bitiş tarihi geçtiyse yanıt alınmaz (`410`, BR-03).
-        - Ağ kopması gibi durumlarda aynı `Idempotency-Key` ile tekrar gönderim aynı sonucu döner, ikinci yanıt oluşmaz.
+        - Aynı anda gelen iki gönderimden yalnızca biri kabul edilir; tekrar gönderim (ör. ağ hatası sonrası)
+          `409 ALREADY_RESPONDED` alır — ön yüz bunu "zaten gönderildi" olarak göstermelidir.
+
+        **Cevap kuralları** (ara kayıt ve gönderim için aynı; ihlal → `422 INVALID_ANSWERS`, `errors[].field` = `answers[i]…`)
+        | Tip | Alanlar | Kural |
+        |---|---|---|
+        | `LIKERT` | `numericValue` | 1..`scale` |
+        | `SINGLE_CHOICE` | `optionIds` (≤1) veya `otherText` | seçenek bu soruya ait; `otherText` yalnızca `allowOther`; ikisi birlikte olamaz |
+        | `MULTIPLE_CHOICE` | `optionIds` + `otherText` | seçenekler bu soruya ait ve tekrarsız; toplam seçim `minSelect`..`maxSelect` ("Diğer" dahil) |
+        | `FREE_TEXT` | `text` | ≤ `maxLength` |
+
+        `questionId` ankette olmalı ve bir kez gelmeli; tipe ait olmayan alan dolu olamaz. Hiçbir alanı dolu olmayan
+        cevap yanıtlanmamış sayılır.
       security:
         - userAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -965,7 +992,7 @@ paths:
         '410':
           $ref: '#/components/responses/SurveyNotAvailable'
         '422':
-          description: Zorunlu sorular eksik veya yanıt değeri kurallara uymuyor
+          description: '`INVALID_ANSWERS` (değer kurallara uymuyor) veya `REQUIRED_ANSWERS_MISSING` (zorunlu soru eksik)'
           content:
             application/problem+json:
               schema:
@@ -1021,14 +1048,6 @@ components:
         minimum: 1
         maximum: 100
         default: 20
-    IdempotencyKey:
-      name: Idempotency-Key
-      in: header
-      required: false
-      description: İstemcinin ürettiği benzersiz anahtar (UUID önerilir); 24 saat saklanır
-      schema:
-        type: string
-        maxLength: 64
 
   responses:
     ValidationError:
@@ -1079,6 +1098,21 @@ components:
             title: Anket bulunamadı
             status: 404
             code: SURVEY_NOT_FOUND
+    InvalidAnswers:
+      description: Cevap değerleri soru kurallarına uymuyor
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://survey.example.com/problems/invalid-answers
+            title: Bazı cevaplar geçersiz
+            status: 422
+            code: INVALID_ANSWERS
+            errors:
+              - field: answers[0].numericValue
+                code: OUT_OF_RANGE
+                message: 1 ile 5 arasında olmalı
     TooManyRequests:
       description: Çok fazla istek
       headers:
@@ -2072,10 +2106,10 @@ components:
           format: uuid
         numericValue:
           type: integer
-          minimum: 1
-          maximum: 10
+          description: Likert değeri (1..scale)
         optionIds:
           type: array
+          maxItems: 100
           uniqueItems: true
           items:
             type: string
