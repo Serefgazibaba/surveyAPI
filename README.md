@@ -58,6 +58,10 @@ IntelliJ'de çalıştırırken Run Configuration → Environment variables alan�
 | `JWT_SECRET` | ✔ | | HS256 imza anahtarı, en az 32 karakter (`openssl rand -base64 48`) |
 | `CORS_ALLOWED_ORIGINS` | | `http://localhost:3000` | Virgülle ayrılmış izinli origin'ler |
 | `FRONTEND_BASE_URL` | | `http://localhost:3000` | Davet linklerinin tabanı (`{FRONTEND_BASE_URL}/s/{token}`) |
+| `MAIL_HOST`, `MAIL_PORT` | | `smtp.gmail.com`, `587` | SMTP sunucusu (STARTTLS) |
+| `MAIL_USERNAME` | mail için | | SMTP kullanıcısı |
+| `MAIL_PASSWORD` | mail için | | SMTP şifresi (Gmail: uygulama şifresi) |
+| `MAIL_FROM`, `MAIL_FROM_NAME` | | `MAIL_USERNAME`, `Survey Tool` | Gönderen adresi ve adı |
 | `SERVER_PORT` | | `8080` | HTTP portu |
 | `DB_NAME`, `DB_PORT` | | `survey`, `5432` | Yalnızca docker-compose için |
 | `AUTH_SESSION_IDLE_TIMEOUT` | | `30m` | Son refresh'ten sonra oturumun düşeceği süre (FR-02) |
@@ -73,9 +77,10 @@ com.definex.survey
 ├─ config/      @ConfigurationProperties (JWT, Auth, CORS), CORS ve Clock bean'leri, OpenAPI
 ├─ security/    SecurityFilterChain, JWT encoder/decoder, JwtTokenService, Roles, 401/403 handler'ları
 ├─ exception/   GlobalExceptionHandler, ProblemDetailFactory, ApiException ve alt sınıfları
+├─ mail/        e-posta altyapısı: email_messages, JavaMailSender, MailService (anket/davet bilmez)
 ├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
 ├─ auth/        /admin/auth/*, /user/auth/*, /admin/getAllUsers
-├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey (anket → sorular → seçenekler, davetler)
+├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey, /admin/getMails, /admin/resendMails
 ├─ report/      /admin/surveys/{surveyId}/report*
 └─ user/        katılımcı tarafı: /user/surveys/* (form, ara kayıt, yanıt gönderimi)
 ```
@@ -210,15 +215,15 @@ curl -i -X DELETE http://localhost:8080/api/v1/admin/surveys/<surveyId> -H "Auth
 
 Katılımcılar `users` tablosundaki `USER` rolündeki aktif kullanıcılardır. Admin anket düzenleme ekranında
 kullanıcıları listeleyip seçer, ardından anketi yayınlar. Her katılımcı için davete özel bir link üretilir
-(`{FRONTEND_BASE_URL}/s/{token}`); token'ın yalnızca hash'i saklanır. E-posta henüz gönderilmez: linkler yanıtta
-döner ve dev profilinde log'a yazılır.
+(`{FRONTEND_BASE_URL}/s/{token}`); token'ın yalnızca hash'i saklanır. Link yalnızca davet mailiyle gider; yanıtta dönmez
+(dev profilinde log'a yazılır).
 
 ```bash
 # 1. Davet edilebilecek kullanıcılar (ad/e-posta araması, sayfalı)
 curl -s "http://localhost:8080/api/v1/admin/getAllUsers?q=zeynep&page=1&size=20" \
   -H "Authorization: Bearer <accessToken>"
 
-# 2. Yayınla → 200; anket PUBLISHED olur, davet linkleri döner
+# 2. Yayınla → 200; anket PUBLISHED olur, davet mailleri kuyruğa alınır (emailStatus: QUEUED)
 curl -s -X POST http://localhost:8080/api/v1/admin/publishSurvey \
   -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
   -d '{"surveyId":"<surveyId>","userIds":["0a1b2c3d-0000-4000-8000-000000000101"]}'
@@ -233,6 +238,47 @@ Yayınlamadan önce tamlık kontrol edilir; eksikler tek seferde döner:
 | Anket taslak değil (tekrar yayınlama dahil) | 409 | `INVALID_SURVEY_STATUS` |
 
 Yayındaki anketin bitiş tarihi geçince durum en geç bir dakika içinde otomatik olarak `EXPIRED` olur.
+
+## Davet mailleri
+
+Mailler `JavaMailSender` ile SMTP üzerinden gönderilir. Publish, her davet için `email_messages` tablosuna bir kayıt
+yazar (aynı transaction). Commit sonrası mail arka planda **bir kez** gönderilir ve `SENT` ya da `FAILED` olur.
+Otomatik yeniden deneme yoktur: admin ekrandan durumlara göre filtreler ve gönderilemeyenleri seçip yeniden gönderir.
+
+```bash
+# Gönderilemeyen mailler (filtreler opsiyonel ve birlikte kullanılabilir)
+curl -s "http://localhost:8080/api/v1/admin/getMails?surveyId=<surveyId>&emailStatus=FAILED" \
+  -H "Authorization: Bearer <accessToken>"
+
+# Seçilenleri yeniden gönder (davet linki yenilenir; eski link geçersiz olur)
+curl -s -X POST http://localhost:8080/api/v1/admin/resendMails \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"emailIds":["<emailId>"]}'
+```
+
+| Filtre | Değerler |
+|---|---|
+| `emailStatus` | `QUEUED`, `SENDING`, `SENT`, `FAILED` (çoklu) |
+| `invitationStatus` | `PENDING`, `STARTED`, `COMPLETED`, `CANCELLED` (çoklu) |
+| `surveyId`, `q`, `page`, `size` | anket, alıcı adı/e-posta araması, sayfalama |
+
+Yanıttaki `summary` durum başına sayıları, her satırdaki `resendable` yeniden gönderilebilirliği verir.
+10 dakikadan uzun `SENDING` durumunda kalan mail `stuck: true` olarak işaretlenir ve yeniden gönderilebilir.
+Uygun olmayan bir mail seçilirse hiçbiri gönderilmez (`422 MAILS_NOT_RESENDABLE`).
+
+### Gmail ile gerçek gönderim (dev)
+
+1. Gmail hesabında 2 adımlı doğrulamayı açın ve https://myaccount.google.com/apppasswords adresinden bir
+   uygulama şifresi oluşturun.
+2. `.env` dosyasına yazın (boşluksuz): `MAIL_USERNAME=hesap@gmail.com`, `MAIL_PASSWORD=<16 haneli şifre>`.
+3. `docker compose up --build`. Gönderim sonucu `docker logs survey-api` içinde (`Mail gönderildi` /
+   `Mail gönderilemedi`) ve `getMails` ucunda görünür.
+
+### Gerçek katılımcılar (yerel seed)
+
+`dev-users.sql` içindeki katılımcıların adresleri sahte olduğundan onlara mail gitmez veya yanlış kişiye gidebilir.
+Gerçek kişileri **git'e eklenmeyen** `src/main/resources/db/seed/local-users.sql` dosyasına ekleyin
+(şablon: `local-users.sql.example`). Dev profilinde dosya varsa her açılışta çalıştırılır.
 
 ## Hata yanıtı örnekleri
 
