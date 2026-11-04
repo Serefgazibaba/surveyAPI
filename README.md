@@ -120,7 +120,7 @@ com.definex.survey
 ├─ auth/        /admin/auth/*, /admin/getAllUsers
 ├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey, /admin/getMails, /admin/resendMails
 ├─ template/    /admin/templates/*, /admin/saveAsTemplate, /admin/upsertTemplate, /admin/createSurveyFromTemplate
-├─ report/      /admin/surveys/{surveyId}/report*
+├─ report/      /admin/reports, /admin/reports/{surveyId}, /admin/reports/{surveyId}/download (tablosuz; survey/user/auth service'lerinden okur)
 └─ user/        katılımcı tarafı: /user/auth/login, /user/surveys/* (form, ara kayıt, gönderim); responses, answers
 ```
 
@@ -313,6 +313,30 @@ curl -s -X DELETE http://localhost:8080/api/v1/admin/templates/<templateId> -H "
 | Şablon yok veya başka Admin'e ait | 404 | `TEMPLATE_NOT_FOUND` |
 | `name` boş, ayar tipe uymuyor | 400 | `VALIDATION_ERROR` |
 | Seçimli olmayan soruya seçenek | 422 | `INVALID_STRUCTURE` |
+
+## Örnek istekler (Rapor)
+
+Rapor taslak olmayan anketler için açılır; yalnızca gönderilmiş yanıtlar sayılır (ara kayıtlar hariç).
+Katılım oranı = yanıt / maili başarıyla gönderilen davet × 100.
+
+```bash
+# 1. Tüm raporlar (başlık araması, durum filtresi, sayfalı)
+curl -s "http://localhost:8080/api/v1/admin/reports?q=memnuniyet&page=1&size=20" -H "Authorization: Bearer <accessToken>"
+
+# 2. Rapor detayı: özet, soru dağılımları, metin cevapları; kayıtlı modda katılımcı bazlı yanıtlar
+curl -s http://localhost:8080/api/v1/admin/reports/<surveyId> -H "Authorization: Bearer <accessToken>"
+
+# 3. Raporu kaydet (CSV; UTF-8 BOM, ';' ayraç)
+curl -s -OJ http://localhost:8080/api/v1/admin/reports/<surveyId>/download -H "Authorization: Bearer <accessToken>"
+```
+
+| | Anonim | Kayıtlı |
+|---|---|---|
+| Özet, dağılımlar, metin cevapları | açık | açık |
+| Katılımcı bazlı yanıtlar (`responses`) | yanıtta yer almaz | ad, e-posta, cevaplar |
+| CSV | kimlik sütunu yok; zaman saat hassasiyetinde | `Ad Soyad`, `E-posta` sütunlu |
+
+PDF, rapor ekranındaki "PDF İndir" ile tarayıcının yazdırma penceresinden alınır. Taslak anket için `409 REPORT_NOT_AVAILABLE`.
 
 ## Davet mailleri
 

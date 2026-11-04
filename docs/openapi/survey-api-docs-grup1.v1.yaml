@@ -895,31 +895,70 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /admin/surveys/{surveyId}/report:
+  /admin/reports:
+    get:
+      tags: [Admin - Reports]
+      operationId: adminListReports
+      summary: Tüm raporlar
+      description: |
+        Admin'in taslak olmayan anketlerinin özet sayıları, son güncellenen önce (FR-70, BR-09).
+        - Katılım oranı = yanıt / maili başarıyla gönderilen (`SENT`) davet × 100, bir ondalık (BR-10); payda 0 ise `0`.
+        - Yalnızca gönderilmiş yanıtlar sayılır; ara kayıtlar hariçtir (BR-03).
+        - `status=DRAFT` gönderilirse `400` (taslak anketin raporu yoktur).
+      security:
+        - adminAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: Anket başlığında arama (büyük/küçük harf duyarsız)
+          schema:
+            type: string
+            maxLength: 100
+        - name: status
+          in: query
+          description: Durum filtresi; birden çok verilebilir. Verilmezse `PUBLISHED`, `EXPIRED`, `CLOSED`, `ARCHIVED`.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/SurveyStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Rapor listesi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/reports/{surveyId}:
     parameters:
       - $ref: '#/components/parameters/SurveyId'
     get:
       tags: [Admin - Reports]
-      operationId: adminGetSurveyReport
-      summary: Anket raporu
+      operationId: adminGetReport
+      summary: Rapor detayı
       description: |
-        Özet göstergeler ve soru bazlı yanıt dağılımlarını döner (FR-70, FR-71). Göstergeler anlık verilerle hesaplanır.
-        - Yalnızca gönderilmiş (tamamlanmış) yanıtlar dahil edilir; ara kayıtlar hariçtir (BR-03).
-        - Katılım oranı = tamamlanan yanıt / başarıyla gönderilen davet × 100 (BR-10).
-        - Yanıt sayısı anonimlik eşiğinin (varsayılan 5) altındaysa soru bazlı dağılımlar gösterilmez,
-          `anonymityThresholdMet=false` döner (BR-07).
-        - `DRAFT` durumundaki anket için rapor yoktur (`409`).
+        Anketin raporu tek yanıtta döner; göstergeler anlık hesaplanır (FR-70). Metin cevaplarında arama ve sayfalama
+        istemcide yapılır (FR-72).
+        - `summary`: davet, gönderilen davet, yanıt, katılım oranı (BR-10), ortalama memnuniyet, ortalama tamamlama süresi.
+          Ortalama memnuniyet, farklı ölçekli Likert soruları birlikte ortalanabilsin diye her cevabın 1–5 ölçeğine
+          çevrilmiş ortalamasıdır; soru bazındaki `average` sorunun kendi ölçeğindedir.
+        - `questions`: soru bazlı dağılımlar (FR-71). Yüzdeler soruyu yanıtlayan kişi sayısına göredir; çoklu seçimde
+          toplam %100'ü aşabilir. Serbest metin ve "Diğer" metinleri en yeni önce, tamamı döner. Metinler ham döner;
+          istemci HTML olarak değil düz metin olarak göstermelidir (NFR-05).
+        - `responses`: katılımcı bazlı yanıtlar, **yalnızca kayıtlı modda** (FR-74). Anonim modda alan yanıtta yer almaz ve
+          kimlik bilgisi hiçbir alanda dönmez (BR-06).
+        - Yalnızca gönderilmiş yanıtlar dahildir; ara kayıtlar hariçtir (BR-03). Az yanıtta kırılım gizleme (BR-07) uygulanmaz.
+        - Taslak anket → `409 REPORT_NOT_AVAILABLE`.
       security:
         - adminAuth: []
-      parameters:
-        - name: textAnswerLimit
-          in: query
-          description: Serbest metin sorularında dönecek en yeni yanıt sayısı
-          schema:
-            type: integer
-            minimum: 0
-            maximum: 100
-            default: 20
       responses:
         '200':
           description: Anket raporu
@@ -932,49 +971,31 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Anket henüz yayınlanmadı
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-              example:
-                type: https://survey.example.com/problems/report-not-available
-                title: Taslak anket için rapor oluşturulamaz
-                status: 409
-                code: REPORT_NOT_AVAILABLE
+          $ref: '#/components/responses/ReportNotAvailable'
 
-  /admin/surveys/{surveyId}/report/download:
+  /admin/reports/{surveyId}/download:
     parameters:
       - $ref: '#/components/parameters/SurveyId'
-    post:
+    get:
       tags: [Admin - Reports]
-      operationId: adminDownloadSurveyReport
-      summary: Raporu indir (CSV / PDF)
+      operationId: adminDownloadReport
+      summary: Raporu kaydet (CSV)
       description: |
-        Raporu dosya olarak üretir (FR-73).
-        - **CSV**: Her yanıt bir satır, her soru bir sütun; UTF-8 BOM ile (Türkçe karakterler korunur).
-          Kayıtlı modda katılımcı e-postası ilk sütundur; anonim modda kimlik sütunu yoktur.
-        - **PDF**: Rapor ekranındaki özet göstergeler ve dağılım grafikleri.
-
-        10.000 yanıta kadar dosya senkron olarak `200` ile döner (NFR-13). Daha büyük veri setlerinde
-        `202` döner; dosya arka planda hazırlanır ve hazır olduğunda Admin'e indirme linki e-postayla iletilir.
-        Her indirme denetim kaydına yazılır (NFR-07).
+        Ham yanıtları CSV olarak indirir (FR-73, AS-06). PDF, rapor ekranının tarayıcıdan yazdırılmasıyla alınır.
+        - Her yanıt bir satır, her soru bir sütun; UTF-8 BOM ile (Excel'de Türkçe karakterler korunur), ayraç `;`,
+          RFC 4180 tırnaklama. `= + - @` ile başlayan hücrelere `'` eklenir (formül enjeksiyonu önlemi).
+        - Sütunlar: kayıtlı modda `Ad Soyad`, `E-posta`; ardından `Gönderim (Europe/Istanbul)`, `Süre (sn)`,
+          `S1. <soru>` … Anonim modda kimlik sütunu yoktur ve gönderim zamanı saat hassasiyetindedir (BR-06).
+        - Hücreler okunur metindir: Likert puanı; seçenek etiketleri `, ` ile, "Diğer: …" dahil; serbest metin.
+        - Dosya akış olarak yazılır (NFR-13). Taslak anket → `409 REPORT_NOT_AVAILABLE`.
       security:
         - adminAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ReportDownloadRequest'
-            example:
-              format: CSV
       responses:
         '200':
-          description: Rapor dosyası
+          description: CSV dosyası
           headers:
             Content-Disposition:
-              description: Dosya adı, ör. `attachment; filename="2026-q4-calisan-memnuniyeti.csv"`
+              description: 'Dosya adı, ör. `attachment; filename*=UTF-8''''2026-q4-calisan-memnuniyeti-yanitlar.csv`'
               schema:
                 type: string
           content:
@@ -982,28 +1003,12 @@ paths:
               schema:
                 type: string
                 format: binary
-            application/pdf:
-              schema:
-                type: string
-                format: binary
-        '202':
-          description: Dosya arka planda hazırlanıyor
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExportJobAccepted'
-        '400':
-          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Anket henüz yayınlanmadı veya anonimlik eşiği altında
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          $ref: '#/components/responses/ReportNotAvailable'
 
   # =====================================================================
   # USER (KATILIMCI)
@@ -1348,6 +1353,17 @@ components:
               - field: answers[0].numericValue
                 code: OUT_OF_RANGE
                 message: 1 ile 5 arasında olmalı
+    ReportNotAvailable:
+      description: Taslak anket için rapor yoktur
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://survey.example.com/problems/report-not-available
+            title: Taslak anket için rapor oluşturulamaz
+            status: 409
+            code: REPORT_NOT_AVAILABLE
     TooManyRequests:
       description: Çok fazla istek
       headers:
@@ -2213,9 +2229,20 @@ components:
                 $ref: '#/components/schemas/EmailStatus'
 
     # ---------- Report ----------
-    SurveyReport:
+    ReportListResponse:
       type: object
-      required: [surveyId, title, status, responseMode, generatedAt, summary, anonymityThresholdMet, questions]
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportListItem'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+    ReportListItem:
+      type: object
+      description: Değeri olmayan (null) alanlar yanıtta yer almaz.
+      required: [surveyId, title, status, invitationCount, deliveredInvitationCount, responseCount, participationRate]
       properties:
         surveyId:
           type: string
@@ -2229,21 +2256,55 @@ components:
         endsAt:
           type: string
           format: date-time
+        invitationCount:
+          type: integer
+        deliveredInvitationCount:
+          type: integer
+          description: Maili başarıyla gönderilen davet sayısı (katılım oranının paydası)
+        responseCount:
+          type: integer
+        participationRate:
+          type: number
+          format: double
+          minimum: 0
+          description: yanıt / gönderilen davet × 100, bir ondalık
+        lastResponseAt:
+          type: string
+          format: date-time
+          description: Son yanıt zamanı; yanıt yoksa yer almaz
+    SurveyReport:
+      type: object
+      description: Değeri olmayan (null) alanlar yanıtta yer almaz.
+      required: [surveyId, title, status, responseMode, generatedAt, summary, questions]
+      properties:
+        surveyId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/SurveyStatus'
+        responseMode:
+          $ref: '#/components/schemas/ResponseMode'
+        endsAt:
+          type: string
+          format: date-time
         generatedAt:
           type: string
           format: date-time
         summary:
           $ref: '#/components/schemas/ReportSummary'
-        anonymityThresholdMet:
-          type: boolean
-          description: '`false` ise `questions` boş döner (BR-07)'
-        anonymityThreshold:
-          type: integer
-          example: 5
         questions:
           type: array
           items:
             $ref: '#/components/schemas/QuestionReport'
+        responses:
+          type: array
+          description: Yalnızca kayıtlı modda (FR-74); anonim modda alan yer almaz (BR-06). En yeni önce.
+          items:
+            $ref: '#/components/schemas/ParticipantResponse'
     ReportSummary:
       type: object
       description: Özet göstergeler (FR-70)
@@ -2253,22 +2314,20 @@ components:
           type: integer
         deliveredInvitationCount:
           type: integer
-          description: Başarıyla gönderilen davet sayısı (katılım oranının paydası)
+          description: Maili başarıyla gönderilen davet sayısı (katılım oranının paydası)
         responseCount:
           type: integer
         participationRate:
           type: number
           format: double
           minimum: 0
-          maximum: 100
         averageSatisfactionScore:
           type: number
           format: double
-          nullable: true
-          description: Likert sorularının ortalaması; Likert soru yoksa `null`
+          description: Tüm Likert cevaplarının 1–5 ölçeğine çevrilmiş ortalaması; Likert cevabı yoksa yer almaz
         averageCompletionSeconds:
           type: integer
-          nullable: true
+          description: Süresi ölçülen (ara kaydı olan) yanıtların ortalaması; yoksa yer almaz
     QuestionReport:
       oneOf:
         - $ref: '#/components/schemas/LikertQuestionReport'
@@ -2283,7 +2342,7 @@ components:
           FREE_TEXT: '#/components/schemas/FreeTextQuestionReport'
     QuestionReportBase:
       type: object
-      required: [questionId, number, text, type, answerCount]
+      required: [questionId, number, type, answerCount]
       properties:
         questionId:
           type: string
@@ -2296,20 +2355,22 @@ components:
           $ref: '#/components/schemas/QuestionType'
         answerCount:
           type: integer
+          description: Soruyu yanıtlayan kişi sayısı (yüzdelerin paydası)
     LikertQuestionReport:
       allOf:
         - $ref: '#/components/schemas/QuestionReportBase'
         - type: object
-          required: [scale, average, distribution]
+          required: [scale, distribution]
           properties:
             scale:
               type: integer
             average:
               type: number
               format: double
-              nullable: true
+              description: Sorunun kendi ölçeğinde ortalama; cevap yoksa yer almaz
             distribution:
               type: array
+              description: 1..scale her değer için bir satır
               items:
                 type: object
                 required: [value, count, percentage]
@@ -2318,7 +2379,7 @@ components:
                     type: integer
                   label:
                     type: string
-                    nullable: true
+                    description: Yalnızca uç değerlerde (minLabel / maxLabel)
                   count:
                     type: integer
                   percentage:
@@ -2328,14 +2389,14 @@ components:
       allOf:
         - $ref: '#/components/schemas/QuestionReportBase'
         - type: object
-          required: [options]
+          required: [options, otherCount, otherAnswers]
           properties:
             options:
               type: array
-              description: Çoklu seçimde yüzdeler soruyu yanıtlayan kişi sayısına göre hesaplanır, toplam %100'ü aşabilir
+              description: Anketteki seçenek sırasıyla; çoklu seçimde yüzdelerin toplamı %100'ü aşabilir
               items:
                 type: object
-                required: [optionId, label, count, percentage]
+                required: [optionId, count, percentage]
                 properties:
                   optionId:
                     type: string
@@ -2349,49 +2410,68 @@ components:
                     format: double
             otherCount:
               type: integer
-              description: “Diğer” seçilen yanıt sayısı
+              description: “Diğer” seçen sayısı
+            otherAnswers:
+              type: array
+              description: “Diğer” metinleri, en yeni önce
+              items:
+                $ref: '#/components/schemas/ReportTextAnswer'
     FreeTextQuestionReport:
       allOf:
         - $ref: '#/components/schemas/QuestionReportBase'
         - type: object
-          required: [latestAnswers]
+          required: [answers]
           properties:
-            latestAnswers:
+            answers:
               type: array
-              description: En yeni `textAnswerLimit` adet yanıt. Metinler ham döner; istemci HTML kaçışı uygulamalıdır (NFR-05)
+              description: Tüm metin cevapları, en yeni önce. Ham metin; istemci düz metin olarak göstermelidir (NFR-05)
               items:
-                type: object
-                required: [text, submittedAt]
-                properties:
-                  text:
-                    type: string
-                  submittedAt:
-                    type: string
-                    format: date-time
-
-    ReportDownloadRequest:
+                $ref: '#/components/schemas/ReportTextAnswer'
+    ReportTextAnswer:
       type: object
-      required: [format]
+      required: [text, submittedAt]
       properties:
-        format:
+        text:
           type: string
-          enum: [CSV, PDF]
-    ExportJobAccepted:
+        submittedAt:
+          type: string
+          format: date-time
+          description: Anonim modda saat hassasiyetinde (BR-06)
+    ParticipantResponse:
       type: object
-      required: [exportId, status, format]
+      required: [responseId, submittedAt, answers]
       properties:
-        exportId:
+        responseId:
           type: string
           format: uuid
-        status:
+        participant:
+          type: object
+          required: [fullName, email]
+          properties:
+            fullName:
+              type: string
+            email:
+              type: string
+              format: email
+        submittedAt:
           type: string
-          enum: [QUEUED, RUNNING]
-        format:
-          type: string
-          enum: [CSV, PDF]
-        message:
-          type: string
-          example: Dosya hazırlanıyor; hazır olduğunda e-posta ile bilgilendirileceksiniz.
+          format: date-time
+        durationSeconds:
+          type: integer
+          description: Yalnızca ara kaydı olan yanıtlarda
+        answers:
+          type: array
+          description: Yalnızca yanıtlanan sorular, soru sırasıyla
+          items:
+            type: object
+            required: [questionId, value]
+            properties:
+              questionId:
+                type: string
+                format: uuid
+              value:
+                type: string
+                description: 'Okunur cevap: Likert puanı, seçenek etiketleri (`, ` ile, "Diğer: …" dahil) veya metin'
 
     # ---------- User Survey ----------
     UserSurvey:

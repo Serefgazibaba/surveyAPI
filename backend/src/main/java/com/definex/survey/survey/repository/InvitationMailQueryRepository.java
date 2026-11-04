@@ -75,6 +75,21 @@ public class InvitationMailQueryRepository {
         return counts;
     }
 
+    /** Rapor: anket başına maili başarıyla gönderilmiş ({@code SENT}) davet sayısı (BR-10 paydası). */
+    public Map<UUID, Long> countDeliveredBySurveyIds(Collection<UUID> surveyIds) {
+        Map<UUID, Long> counts = new HashMap<>();
+        if (surveyIds.isEmpty()) {
+            return counts;
+        }
+        entityManager.createQuery("select s.id, count(m) " + FROM
+                        + " where s.id in :ids and m.status = :sent group by s.id", Object[].class)
+                .setParameter("ids", surveyIds)
+                .setParameter("sent", EmailStatus.SENT)
+                .getResultList()
+                .forEach(row -> counts.put((UUID) row[0], (Long) row[1]));
+        return counts;
+    }
+
     /** Yeniden gönderim kontrolü için verilen maillerin satırları (yalnızca bu admin'in). */
     public List<InvitationMailRow> findByEmailIds(UUID ownerId, Collection<UUID> emailIds) {
         return entityManager.createQuery(

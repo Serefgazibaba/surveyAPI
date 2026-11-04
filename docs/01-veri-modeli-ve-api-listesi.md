@@ -30,9 +30,9 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 | T17 | `email_templates`         | Davet, hatırlatma vb. konu/gövde şablonları                          | MVP    | FR-46, Bölüm 9            |
 | T18 | `dispatches`              | Bir “Gönder / Hatırlat” toplu işlemi ve özeti (henüz yok)            | F2     | FR-42–44, S-06            |
 | T19 | `email_messages`          | Gönderilen/gönderilecek mailler, durum ve hata takibi                | MVP    | NFR-10, NFR-21, NFR-42    |
-| T20 | `export_jobs`             | CSV/PDF dışa aktarım işleri (asenkron)                               | MVP    | FR-73, NFR-13             |
+| T20 | `export_jobs`             | CSV/PDF dışa aktarım işleri (asenkron)                               | F2     | FR-73, NFR-13             |
 | T21 | `audit_logs`              | Admin işlemleri denetim kaydı                                        | MVP    | NFR-07                    |
-| T22 | `system_settings`         | Mail sağlayıcı, anonimlik eşiği, saklama süresi vb.                  | MVP    | NFR-21, BR-07, Q-05       |
+| T22 | `system_settings`         | Mail sağlayıcı, saklama süresi vb.                                   | MVP    | NFR-21, Q-05              |
 
 ### 1.2 Tablo detayları
 
@@ -200,14 +200,15 @@ Gönderim akışı:
 - Admin `GET /admin/getMails` ile durumlara göre filtreler ve `POST /admin/resendMails` ile seçilenleri yeniden gönderir. Yeniden gönderimde davet token'ı yenilenir.
 - 10 dakikadan uzun süre `SENDING` durumunda kalan mail takılı sayılır ve yeniden gönderilebilir.
 
-#### T20 `export_jobs`
+#### T20 `export_jobs` (F2)
+CSV şu an istek anında akışla üretilir (API-92); arka planda dışa aktarım çok büyük anketler için F2'ye bırakıldı.
 id, survey_id FK, format (`CSV`, `PDF`), filters (json), status (`QUEUED`, `RUNNING`, `READY`, `FAILED`), file_location, expires_at, requested_by FK, created_at, completed_at.
 
 #### T21 `audit_logs`
 id, user_id FK NULL, action (ör. `SURVEY_PUBLISHED`, `SURVEY_DELETED`, `EXPORT_DOWNLOADED`, `DEADLINE_EXTENDED`), entity_type, entity_id, details (json), ip, user_agent, created_at. Kişisel veri / token yazılmaz (NFR-43).
 
 #### T22 `system_settings`
-key PK, value (json), updated_by, updated_at. Örnek anahtarlar: `mail.provider`, `mail.from`, `report.anonymity_threshold` (5), `data.retention_days` (730), `auth.lockout`.
+key PK, value (json), updated_by, updated_at. Örnek anahtarlar: `mail.provider`, `mail.from`, `data.retention_days` (730), `auth.lockout`.
 
 ### 1.3 İlişkiler
 
@@ -315,13 +316,12 @@ Katılımcı seçimi ve davet oluşturma API-25a ve API-26, mail takibi ve yenid
 ### 2.9 Raporlama ve Dışa Aktarım (S-07)
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
-| API-90 | GET | `/surveys/{surveyId}/report/summary` | Davet, yanıt, katılım oranı, ort. skor, ort. süre | FR-70, BR-10 |
-| API-91 | GET | `/surveys/{surveyId}/report/questions` | Soru bazlı dağılım; eşik altıysa kırılım yok | FR-71, BR-07 |
-| API-92 | GET | `/surveys/{surveyId}/report/questions/{questionId}/text-answers` | Serbest metin yanıtları, arama + sayfalama | FR-72 |
-| API-93 | GET | `/surveys/{surveyId}/report/responses` + `/{responseId}` | Katılımcı bazlı yanıtlar (yalnız IDENTIFIED) | FR-74 |
-| API-94 | POST | `/surveys/{surveyId}/exports` | CSV/PDF dışa aktarım başlat (küçükse hazır, büyükse 202) | FR-73, NFR-13 |
-| API-95 | GET | `/exports/{exportId}` | Durum | NFR-13 |
-| API-96 | GET | `/exports/{exportId}/download` | Dosyayı indir (audit kaydı) | FR-73, NFR-07 |
+| API-90 | GET | `/admin/reports` | Tüm raporlar: taslak olmayan kendi anketleri; davet, gönderilen davet, yanıt, katılım oranı, son yanıt; arama + durum + sayfalama | FR-70, BR-09, BR-10 |
+| API-91 | GET | `/admin/reports/{surveyId}` | Rapor detayı: özet (ort. memnuniyet 1–5'e çevrilmiş), soru dağılımları, metin ve "Diğer" cevaplarının tamamı, kayıtlı modda katılımcı bazlı yanıtlar | FR-70–72, FR-74, BR-03, BR-06 |
+| API-92 | GET | `/admin/reports/{surveyId}/download` | Raporu kaydet: CSV (UTF-8 BOM, `;`, her yanıt bir satır); anonimde kimlik sütunu yok. PDF tarayıcıdan yazdırılır | FR-73, AS-06 |
+
+> Metin araması ve sayfalama istemcide yapılır (detay tek yanıtta döner). Az yanıtta kırılım gizleme (BR-07) kapsam dışıdır.
+> Çok büyük anketler için detayda sayfalama ve arka planda dışa aktarım (T20) F2'ye bırakıldı.
 
 ### 2.10 Sistem / Operasyon
 | ID | Metot | Yol | Açıklama | Ref |
