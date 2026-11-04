@@ -140,6 +140,7 @@ export default function SurveyBuilderPage() {
 
   return <Shell>
     <PageHead title={form.id ? "Anketi Düzenle" : "Anket Oluşturma"} crumbs={crumbs}>
+      {form.allowedActions?.includes("REPORT") && <Button icon="chart" to={`/reports/${form.id}`}>Raporu Gör</Button>}
       <Button icon="eye" onClick={() => setPreview(true)}>Önizle</Button>
       {canEdit && <Button icon="check" loading={saving} disabled={form.id && !dirty} onClick={() => save()}>Anketi Kaydet</Button>}
       {canPublish && <Button variant="primary" icon="send" disabled={saving} onClick={goToParticipants}>Gönder</Button>}

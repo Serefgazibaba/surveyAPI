@@ -54,6 +54,17 @@ public class UserDirectoryService {
                 .collect(Collectors.toMap(UserSummaryResponse::id, Function.identity()));
     }
 
+    /** Verilen id'lerdeki kullanıcılar (durumdan bağımsız; rapor pasifleşmiş katılımcının adını da gösterir). */
+    @Transactional(readOnly = true)
+    public Map<UUID, UserSummaryResponse> findSummariesByIds(Collection<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findAllById(ids).stream()
+                .map(UserSummaryResponse::from)
+                .collect(Collectors.toMap(UserSummaryResponse::id, Function.identity()));
+    }
+
     private static Specification<User> invitable() {
         return (root, query, cb) -> cb.and(
                 cb.equal(root.get("role"), UserRole.USER),

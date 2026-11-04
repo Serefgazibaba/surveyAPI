@@ -4,5 +4,7 @@ package com.definex.survey.survey.entity;
 public enum SurveyAction {
     EDIT,
     PUBLISH,
-    DELETE
+    DELETE,
+    /** Rapor görüntüleme ve CSV (taslak dışı tüm durumlar). */
+    REPORT
 }

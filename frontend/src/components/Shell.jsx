@@ -6,7 +6,7 @@ import { useAuth } from "../auth/AuthContext.jsx";
 // [yol | null (yakında), ikon, etiket]
 const SECTIONS = [
   ["Benim Alanım", [[null, "home", "Dashboard"], ["/surveys", "list", "Anketlerim"], ["/surveys/new", "plus", "Anket Oluştur"], ["/templates", "template", "Şablonlar"]]],
-  ["Analiz", [[null, "chart", "Raporlar"], ["/mails", "mail", "Gönderim Durumu"], [null, "users", "Katılımcı Listeleri"]]],
+  ["Analiz", [["/reports", "chart", "Raporlar"], ["/mails", "mail", "Gönderim Durumu"], [null, "users", "Katılımcı Listeleri"]]],
 ];
 
 function initials(name = "") {
@@ -18,7 +18,7 @@ function NavItem({ to, icon, label }) {
   if (!to) return <ComingSoon block><button type="button" className="nav-item" disabled><Icon name={icon} />{label}</button></ComingSoon>;
   // "Anketlerim" ve "Şablonlar" alt sayfalarında da aktif kalır ("Anket Oluştur" hariç).
   const active = to === "/surveys" ? pathname.startsWith("/surveys") && pathname !== "/surveys/new"
-    : to === "/templates" ? pathname.startsWith("/templates") : pathname === to;
+    : to === "/templates" || to === "/reports" ? pathname.startsWith(to) : pathname === to;
   return <NavLink to={to} className={`nav-item${active ? " active" : ""}`}><Icon name={icon} />{label}</NavLink>;
 }
 

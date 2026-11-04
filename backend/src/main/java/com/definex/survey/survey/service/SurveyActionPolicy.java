@@ -16,8 +16,8 @@ final class SurveyActionPolicy {
     static List<SurveyAction> allowedActions(SurveyStatus status) {
         return switch (status) {
             case DRAFT -> List.of(SurveyAction.EDIT, SurveyAction.PUBLISH, SurveyAction.DELETE);
-            case PUBLISHED -> List.of(SurveyAction.EDIT);
-            case EXPIRED, CLOSED, ARCHIVED -> List.of();
+            case PUBLISHED -> List.of(SurveyAction.EDIT, SurveyAction.REPORT);
+            case EXPIRED, CLOSED, ARCHIVED -> List.of(SurveyAction.REPORT);
         };
     }
 }

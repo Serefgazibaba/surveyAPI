@@ -48,3 +48,9 @@ a.nav-item,a.btn{text-decoration:none;color:inherit}a.btn.primary{color:#fff}.br
 
 /* Şablonlar */
 .template-card h2{overflow-wrap:anywhere}.template-description{margin:0;color:#475467;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.template-card .template-use{margin-top:auto}
+
+/* Rapor */
+.report-meta{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:-12px 0 20px;color:#475467;font-size:13px}.report-heading h2{display:flex;align-items:center;gap:10px;line-height:1.45}.report-note{margin:0 0 6px}.answer-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.free-answer small{display:block;margin-top:6px}.participant-answer{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--border)}.participant-answer:last-child{border-bottom:0}.participant-answer b{display:flex;align-items:center;gap:10px;font-weight:500}.participant-answer p{padding-left:36px}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.kpis{grid-template-columns:1fr}.bar-row{grid-template-columns:110px 1fr 64px}}
+@media print{.sidebar,.no-print,.head-actions,.breadcrumb,.toast-stack{display:none!important}.app-shell{display:block}.main-content{padding:0;margin:0}.report-card,.kpi{break-inside:avoid}.survey-tool{background:#fff}body{background:#fff}.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}

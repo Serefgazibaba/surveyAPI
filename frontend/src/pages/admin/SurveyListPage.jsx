@@ -74,7 +74,7 @@ export default function SurveyListPage() {
       key: "actions", header: "İşlemler", className: "right", render: s => {
         const can = a => s.allowedActions?.includes(a);
         return <div className="actions">
-          <IconButton icon="chart" label="Sonuçlar (yakında)" disabled />
+          <IconButton icon="chart" label="Sonuçlar" disabled={!can("REPORT")} to={`/reports/${s.id}`} />
           {can("PUBLISH") && <IconButton icon="send" label="Gönder" to={`/surveys/${s.id}/participants`} />}
           {can("EDIT")
             ? <IconButton icon="edit" label="Düzenle" to={`/surveys/${s.id}/edit`} />
