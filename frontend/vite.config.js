@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: env.VITE_PROXY_TARGET || 'http://localhost:8080',
           changeOrigin: true,
+          // İstek tarayıcı açısından aynı origin'e gidiyor; Origin başlığı iletilirse backend
+          // CORS listesinde olmayan portlar (örn. 3001) için 403 "Invalid CORS request" döner.
+          configure: proxy => {
+            proxy.on('proxyReq', proxyReq => proxyReq.removeHeader('origin'))
+          },
         },
       },
     },

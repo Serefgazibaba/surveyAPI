@@ -23,7 +23,8 @@ export default function DataTable({ columns, rows = [], rowKey = r => r.id, load
   const toggleOne = row => {
     const next = new Set(selection.selected);
     const id = rowKey(row);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     selection.onChange(next);
   };
 

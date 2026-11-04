@@ -19,12 +19,12 @@ function buildUrl(path, query) {
   return `${BASE_URL}${path}${qs ? `?${qs}` : ""}`;
 }
 
-async function send(method, path, { body, query, token }) {
+async function send(method, path, { body, query, token, keepalive }) {
   const headers = { Accept: "application/json, application/problem+json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
   try {
-    return await fetch(buildUrl(path, query), { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    return await fetch(buildUrl(path, query), { method, headers, keepalive, body: body !== undefined ? JSON.stringify(body) : undefined });
   } catch {
     throw new ApiError({ network: true });
   }
@@ -60,9 +60,9 @@ export function refreshAdminSession() {
  * auth: "admin" (varsayılan) | "user" (katılımcı) | false (public)
  * Hata durumunda her zaman ApiError fırlatır.
  */
-export async function request(method, path, { body, query, auth = "admin" } = {}) {
+export async function request(method, path, { body, query, auth = "admin", keepalive } = {}) {
   const tokenFor = () => (auth === "admin" ? tokenStore.getAdmin()?.accessToken : auth === "user" ? tokenStore.getParticipant()?.accessToken : null);
-  let response = await send(method, path, { body, query, token: tokenFor() });
+  let response = await send(method, path, { body, query, token: tokenFor(), keepalive });
 
   if (response.status === 401 && auth === "admin" && tokenStore.getAdmin()?.refreshToken) {
     try {

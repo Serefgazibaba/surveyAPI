@@ -23,7 +23,7 @@ services:
       retries: 10
 
   api:
-    build: .
+    build: ./backend
     container_name: survey-api
     depends_on:
       postgres:

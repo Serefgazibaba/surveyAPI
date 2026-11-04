@@ -1,6 +1,6 @@
-# Survey API
+# Survey Tool
 
-Survey Tool backend'i ve ön yüzü ([`frontend/`](frontend/), React + Vite). Admin (anket sahibi) anket oluşturur, yayınlar ve raporlar. Katılımcı (User) e-postadaki
+Survey Tool backend'i ([`backend/`](backend/), Spring Boot) ve ön yüzü ([`frontend/`](frontend/), React + Vite). Admin (anket sahibi) anket oluşturur, yayınlar ve raporlar. Katılımcı (User) e-postadaki
 davet linkiyle anketi doldurur. API sözleşmesi: [`docs/openapi/survey-api-docs-grup1.v1.yaml`](docs/openapi/survey-api-docs-grup1.v1.yaml).
 
 ## Teknoloji
@@ -67,12 +67,14 @@ girin (`Bearer` yazmadan). Doküman koddaki controller'lardan üretilir; sözle�
 Gereksinim: JDK 21 (`JAVA_HOME`). Maven kurmanız gerekmez, `mvnw` kendisi indirir.
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres            # repo kökünde
 export $(grep -v '^#' .env | xargs)      # Windows PowerShell: .env değerlerini ortam değişkeni olarak tanımlayın
+cd backend
 ./mvnw spring-boot:run                    # Windows: mvnw.cmd spring-boot:run
 ```
 
-IntelliJ'de çalıştırırken Run Configuration → Environment variables alanına `.env` değerlerini girin.
+IntelliJ'de `backend/pom.xml` dosyasını Maven projesi olarak açın; Run Configuration → Environment variables
+alanına kökteki `.env` değerlerini girin.
 
 ## Environment variable'lar
 
@@ -100,8 +102,15 @@ Gizli bilgiler koda veya `application*.yml` dosyalarına yazılmaz. `.env` git'e
 ## Proje yapısı
 
 ```
-frontend/        ön yüz (React + Vite); Dockerfile + nginx.conf ile container'a alınır
-src/main/java/
+docker-compose.yml   DB + API + ön yüz; değerler kökteki .env'den okunur
+docs/                API sözleşmesi (OpenAPI) ve veri modeli — iki taraf için ortak
+frontend/            ön yüz (React + Vite); Dockerfile + nginx.conf ile container'a alınır
+backend/             Spring Boot uygulaması (pom.xml, mvnw, Dockerfile)
+```
+
+Backend paketleri (`backend/src/main/java`):
+
+```
 com.definex.survey
 ├─ config/      @ConfigurationProperties (JWT, Auth, CORS), CORS ve Clock bean'leri, OpenAPI
 ├─ security/    SecurityFilterChain, JWT encoder/decoder, JwtTokenService, Roles, 401/403 handler'ları
@@ -153,7 +162,7 @@ Her iş modülü aynı alt paketleri taşır: `controller/ service/ repository/ 
 
 ## Dev seed kullanıcıları
 
-`dev` profilinde uygulama her açılışta `src/main/resources/db/seed/dev-users.sql` dosyasını çalıştırır
+`dev` profilinde uygulama her açılışta `backend/src/main/resources/db/seed/dev-users.sql` dosyasını çalıştırır
 (var olan e-postaları atlar). Şifreler BCrypt ile hash'lenmiştir; aşağıdaki değerler yalnızca yerel geliştirme içindir.
 
 | E-posta | Rol | Şifre |
@@ -306,7 +315,7 @@ Uygun olmayan bir mail seçilirse hiçbiri gönderilmez (`422 MAILS_NOT_RESENDAB
 ### Gerçek katılımcılar (yerel seed)
 
 `dev-users.sql` içindeki katılımcıların adresleri sahte olduğundan onlara mail gitmez veya yanlış kişiye gidebilir.
-Gerçek kişileri **git'e eklenmeyen** `src/main/resources/db/seed/local-users.sql` dosyasına ekleyin
+Gerçek kişileri **git'e eklenmeyen** `backend/src/main/resources/db/seed/local-users.sql` dosyasına ekleyin
 (şablon: `local-users.sql.example`). Dev profilinde dosya varsa her açılışta çalıştırılır.
 
 ## Katılımcı akışı (User)

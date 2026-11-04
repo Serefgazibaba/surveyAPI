@@ -38,6 +38,7 @@ const CODE_MESSAGES = {
   ALREADY_RESPONDED: { title: "Bu anketi zaten yanıtladınız", hint: "Her davet yalnızca bir kez yanıtlanabilir. Katılımınız için teşekkür ederiz." },
   SURVEY_EXPIRED: { title: "Bu anketin süresi dolmuştur", hint: "Anket yanıtlara kapanmıştır. Bir sorun olduğunu düşünüyorsanız anket sahibiyle iletişime geçin." },
   SURVEY_CLOSED: { title: "Bu anket kapatılmıştır", hint: "Anket artık yanıt kabul etmiyor." },
+  NO_PARTICIPANT_SESSION: { title: "Anket oturumu bulunamadı", hint: "Size e-postayla gönderilen davet bağlantısını yeniden açın." },
   INVALID_ANSWERS: { title: "Bazı cevaplar geçersiz", hint: "İşaretli soruları kontrol edin." },
   REQUIRED_ANSWERS_MISSING: { title: "Zorunlu sorular yanıtlanmadı", hint: "İşaretli soruları yanıtlayıp tekrar gönderin." },
 };
@@ -156,5 +157,5 @@ export function indexFromPath(path, prefix = "questions") {
   return m ? Number(m[1]) : null;
 }
 
-/** Hatanın, oturumun bittiğini gösterip göstermediği. */
-export const isAuthError = error => error?.status === 401;
+/** Katılımcının ankete erişimini sonlandıran hata mı? (S-10 erişim hatası sayfasına yönlendirilir) */
+export const isParticipantAccessError = error => [401, 403, 409, 410].includes(error?.status);

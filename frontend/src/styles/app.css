@@ -36,3 +36,12 @@ h1,h2,p{margin-top:0}h1{font-size:24px;line-height:1.25;font-weight:700;letter-s
 .nav-item:disabled{opacity:.55;cursor:not-allowed}
 .preview-banner{background:#FFFAEB;color:var(--warn);text-align:center;padding:8px;font-size:13px;font-weight:500}
 @media(max-width:560px){.grid-2{grid-template-columns:1fr}.toast{min-width:0}}
+a.nav-item,a.btn{text-decoration:none;color:inherit}a.btn.primary{color:#fff}.breadcrumb a{color:inherit;text-decoration:none}.breadcrumb a:hover{color:var(--primary)}
+.badge.red{background:#FEF3F2;color:#B42318}
+.profile>div:nth-child(2){min-width:0}.profile small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.link-btn{border:0;background:none;color:var(--primary);padding:0;font-weight:500;cursor:pointer}.link-btn:disabled{color:var(--subtle);cursor:not-allowed}
+.input.has-error{border-color:var(--danger)}.icon-action:disabled{opacity:.35;cursor:not-allowed}.question-error{font-size:12px;color:var(--danger);margin:-6px 0 0 45px}
+.chip-item.invalid{background:#FEF3F2;color:#B42318}.toolbar .select{width:auto;min-width:220px;max-width:100%}
+.actions{flex-wrap:nowrap}.survey-tool td.right{white-space:nowrap}
+.state-icon.error{box-shadow:0 0 0 8px #FFF6F5}.state-icon.warning{box-shadow:0 0 0 8px #FFFCF5}.state-icon.info{box-shadow:0 0 0 8px #F3F6FE}
+.survey-tool .text-danger{color:var(--danger)}

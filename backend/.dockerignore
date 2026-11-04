@@ -1,8 +1,5 @@
 target/
-.git/
 .idea/
 .vscode/
-docs/
 .env
 *.log
-frontend/

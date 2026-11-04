@@ -1,6 +1,6 @@
 # Build
 target/
-!.mvn/wrapper/maven-wrapper.jar
+!backend/.mvn/wrapper/maven-wrapper.jar
 
 # Ortam ve gizli bilgiler
 .env
@@ -24,4 +24,7 @@ Thumbs.db
 logs/
 
 # Gerçek kişileri içeren yerel seed (public repoya girmez)
-src/main/resources/db/seed/local-users.sql
+backend/src/main/resources/db/seed/local-users.sql
+
+# Ön yüz: editör/önizleme ayarları
+frontend/.claude/
