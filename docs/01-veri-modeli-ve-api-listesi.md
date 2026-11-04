@@ -21,7 +21,7 @@ Kapsam etiketleri: **MVP** = Faz 1, **F2** = Faz 2, **F3** = Faz 3.
 | T06 | `questions`               | Sorular; tipe özel ayarlar JSON                                      | MVP    | FR-22–25, 4.4             |
 | T07 | `question_options`        | Seçimli soruların seçenekleri                                        | MVP    | FR-22, 4.4                |
 | T08 | `survey_shares`           | Anketin başka Admin’lerle paylaşımı / ortak sahiplik                 | F2     | BR-09, Q-07               |
-| T09 | `templates`               | Yeniden kullanılabilir anket iskeleti                                | MVP    | FR-30–32                  |
+| T09 | `templates`               | Yeniden kullanılabilir anket iskeleti (soru snapshot'ı, kişisel)     | MVP    | FR-30, FR-31              |
 | T12 | `invitations`             | Kullanıcı (USER) ↔ anket davet kaydı, token hash, davet durumu       | MVP    | FR-42–45, 3.3             |
 | T13 | `response_drafts`         | Gönderim öncesi ara kayıt (davete bağlı)                             | MVP    | FR-63, AS-02, BR-06       |
 | T14 | `responses`               | Kesinleşmiş (gönderilmiş) yanıt                                      | MVP    | BR-01, BR-06              |
@@ -99,7 +99,7 @@ id, user_id FK, token_hash, expires_at, used_at NULL, created_at.
 
 Taslak yarım kaydedilebildiği için `title` dışındaki alanlar nullable'dır; tamlık yayınlamada kontrol edilir.
 Eşzamanlı düzenlemede son kaydeden kazanır (sürüm kolonu yok). Şu kolonlar ilgili özellikler geldiğinde eklenecek:
-`template_id` (FR-31), `status_before_archive`, `auto_reminder_days_before` (FR-44), `contact_info` (FR-65).
+`status_before_archive`, `auto_reminder_days_before` (FR-44), `contact_info` (FR-65).
 
 > Anket yapısı **bölümsüzdür**: anket → sorular → seçenekler. `survey_sections` tablosu yoktur.
 
@@ -122,7 +122,19 @@ id, question_id FK, sort_order, label NULL, created_at, updated_at. "Diğer" se�
 survey_id FK, user_id FK, role (`CO_OWNER`, `VIEWER`), created_at. PK (survey_id, user_id).
 
 #### T09 `templates`
-id, owner_id FK, name, description, content (json — soru/seçenek ağacı; snapshot olduğu için anketlerden bağımsız), visibility (`PRIVATE`, `TEAM` — F2), created_at, updated_at.
+| Kolon | Tip | Not |
+|---|---|---|
+| id | uuid PK | |
+| owner_id | uuid, index | `users.id`; modül sınırı nedeniyle JPA ilişkisi yok. Şablonlar kişiseldir (BR-09) |
+| name | string(200) | zorunlu |
+| description | string(2000) NULL | |
+| content | jsonb | soru listesi: `{text, type, required, settings, options: [{label}]}`; dizi sırası = soru / seçenek sırası |
+| created_at / updated_at | timestamp | |
+
+Şablon bir **snapshot**'tır: kaydedildiği andaki sorular kopyalanır, kimlik taşımaz. Kaynak anket değişse veya silinse
+şablon değişmez; şablondan üretilen anketle şablon arasında bağ tutulmaz (`surveys.template_id` yok), bu yüzden
+şablon silmek anketleri etkilemez (FR-31). Şablona katılımcı, bitiş tarihi, yanıt modu ve yanıt girmez (FR-30).
+Paylaşım (`visibility`, FR-32) F2'ye bırakıldı.
 
 > Ayrı bir katılımcı tablosu yoktur: katılımcılar `users` tablosundaki `role = USER` kullanıcılardır (T01). CSV içe aktarım ileride gerekirse `users` üzerinden tasarlanacak.
 
@@ -262,11 +274,12 @@ Sorular ve seçenekler ayrı uçlarla değil, anket kaydetme ucuyla (API-21) yö
 ### 2.5 Şablonlar
 | ID | Metot | Yol | Açıklama | Ref |
 |---|---|---|---|---|
-| API-50 | GET | `/templates` | Şablon listesi (kişisel + paylaşılan) | FR-31, FR-32 |
-| API-51 | POST | `/surveys/{surveyId}/save-as-template` | Anketi şablon olarak kaydet | FR-30 |
-| API-52 | GET | `/templates/{templateId}` | Detay | FR-31 |
-| API-53 | PATCH | `/templates/{templateId}` | Ad, açıklama, içerik, görünürlük | FR-31, FR-32 |
-| API-54 | DELETE | `/templates/{templateId}` | Sil (türetilmiş anketler etkilenmez) | FR-31 |
+| API-50 | GET | `/admin/templates` | Kendi şablonları; ad araması + sayfalama, son güncellenen önce | FR-31 |
+| API-51 | POST | `/admin/saveAsTemplate` | Anketi şablon olarak kaydet: `{surveyId, name?, description?}` (her durumdaki anket) | FR-30 |
+| API-52 | GET | `/admin/templates/{templateId}` | Detay (sorularıyla) | FR-31 |
+| API-53 | POST | `/admin/upsertTemplate` | **Kaydet (upsert)**: `id` yoksa oluştur, varsa ad, açıklama ve soruların tamamını değiştir | FR-31 |
+| API-54 | DELETE | `/admin/templates/{templateId}` | Sil (türetilmiş anketler etkilenmez) | FR-31 |
+| API-55 | POST | `/admin/createSurveyFromTemplate` | Şablondan yeni DRAFT anket: `{templateId, title?}`; yanıt `upsertSurvey` ile aynı | FR-30 |
 
 ### 2.6 Katılımcılar ve Davetler (S-05)
 Katılımcı seçimi ve davet oluşturma API-25a ve API-26, mail takibi ve yeniden gönderim API-67a ve API-67 ile yapılır. Diğer uçlar ileride ele alınacak.
