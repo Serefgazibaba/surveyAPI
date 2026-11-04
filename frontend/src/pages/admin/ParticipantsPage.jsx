@@ -94,7 +94,7 @@ export default function ParticipantsPage() {
   return <Shell>
     <PageHead title="Katılımcılar" crumbs={crumbs}>
       <Button to={`/surveys/${id}/edit`}>Geri</Button>
-      {canPublish && <Button variant="primary" icon="send" disabled={!count || count > MAX_PARTICIPANTS} onClick={() => setConfirming(true)}>Tamam ve Gönder</Button>}
+      {canPublish && <Button variant="primary" icon="send" disabled={!count || count > MAX_PARTICIPANTS} onClick={() => setConfirming(true)}>Gönder</Button>}
     </PageHead>
 
     {!canPublish && <Alert tone="info" title="Bu anket zaten yayınlanmış"
