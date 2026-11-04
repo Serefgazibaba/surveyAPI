@@ -108,7 +108,24 @@ export default function SurveyBuilderPage() {
     }
   };
 
+  // Katılımcı seçimine geçmeden önce: başlık, gelecekte bir bitiş tarihi + saati ve en az bir soru zorunlu.
+  // (Taslak kaydetmek için yalnızca başlık yeterlidir; soru içeriğinin tamlığı yayınlamada sunucuda kontrol edilir.)
+  const publishErrors = () => {
+    const errors = [];
+    if (!form.title.trim()) errors.push({ field: "title", code: "NotBlank", message: "Anket başlığı boş bırakılamaz" });
+    if (!form.endsAt) errors.push({ field: "endsAt", code: "END_DATE_REQUIRED", message: "Bitiş tarihi ve saati girilmelidir" });
+    else if (new Date(form.endsAt).getTime() <= Date.now()) errors.push({ field: "endsAt", code: "END_DATE_IN_PAST", message: "Bitiş tarihi ve saati gelecekte olmalıdır" });
+    if (form.questions.length === 0) errors.push({ field: "questions", code: "QUESTIONS_REQUIRED", message: "En az bir soru eklenmelidir" });
+    return errors;
+  };
+
   const goToParticipants = async () => {
+    const errors = publishErrors();
+    if (errors.length) {
+      setSaveError({ status: 422, code: "SURVEY_INCOMPLETE", errors });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     const res = dirty || !form.id ? await save({ quiet: true }) : form;
     if (res) navigate(`/surveys/${res.id}/participants`);
   };
@@ -143,7 +160,7 @@ export default function SurveyBuilderPage() {
       {form.allowedActions?.includes("REPORT") && <Button icon="chart" to={`/reports/${form.id}`}>Raporu Gör</Button>}
       <Button icon="eye" onClick={() => setPreview(true)}>Önizle</Button>
       {canEdit && <Button icon="check" loading={saving} disabled={form.id && !dirty} onClick={() => save()}>Anketi Kaydet</Button>}
-      {canPublish && <Button variant="primary" icon="send" disabled={saving} onClick={goToParticipants}>Gönder</Button>}
+      {canPublish && <Button variant="primary" icon="users" disabled={saving} onClick={goToParticipants}>Katılımcıları Seç</Button>}
     </PageHead>
 
     <ErrorAlert error={saveError} onItemClick={focusError} />
@@ -154,7 +171,7 @@ export default function SurveyBuilderPage() {
       <div>
         <section className="panel section-panel">
           <div className="inline-between"><span /><StatusBadge value={form.status} /></div>
-          <Field label="Anket başlığı" id="title" error={fieldErrors.title}>
+          <Field label="Anket başlığı *" id="title" error={fieldErrors.title}>
             <TextInput maxLength={200} value={form.title} disabled={!canEdit} onChange={e => set({ title: e.target.value })} placeholder="Örn. Eğitim Değerlendirme Anketi" />
           </Field>
           <Field label="Açıklama" id="description" error={fieldErrors.description}>
@@ -173,8 +190,8 @@ export default function SurveyBuilderPage() {
 
       <aside className="panel settings-panel">
         <h2>Anket Ayarları</h2>
-        <Field label="Bitiş tarihi ve saati" id="endsAt" error={fieldErrors.endsAt} hint="İstanbul saati">
-          <DateTimeInput value={form.endsAt} disabled={!structural} onChange={v => set({ endsAt: v })} />
+        <Field label="Bitiş tarihi ve saati *" id="endsAt" error={fieldErrors.endsAt} hint="İstanbul saati">
+          <DateTimeInput value={form.endsAt} disabled={!structural} invalid={!!fieldErrors.endsAt} onChange={v => set({ endsAt: v })} />
         </Field>
         <div className="inline-between" id="field-responseMode">
           <div><b>Anonim yanıt</b><small>Yanıtlar kişiyle ilişkilendirilmez</small></div>
@@ -184,7 +201,6 @@ export default function SurveyBuilderPage() {
         {fieldErrors.responseMode && <p className="field-error">{fieldErrors.responseMode}</p>}
         <hr />
         <div className="inline-between"><span>Katılımcılar</span><b>{form.participantCount} kişi</b></div>
-        {canPublish && <Button disabled={saving} onClick={goToParticipants}>Katılımcıları Yönet</Button>}
         <hr />
         <div className="inline-between"><span>Soru</span><b>{form.questions.length}</b></div>
         <div className="inline-between"><span>Zorunlu soru</span><b>{requiredCount}</b></div>
