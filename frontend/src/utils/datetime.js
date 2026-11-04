@@ -34,6 +34,14 @@ const dateFmt = new Intl.DateTimeFormat("tr-TR", { timeZone: TIME_ZONE, day: "2-
 const dateTimeFmt = new Intl.DateTimeFormat("tr-TR", { timeZone: TIME_ZONE, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const timeFmt = new Intl.DateTimeFormat("tr-TR", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" });
 
+/** Saniye → "3 dk 12 sn"; değer yoksa "—". */
+export function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m ? `${m} dk ${s} sn` : `${s} sn`;
+}
+
 export const formatDate = iso => (iso ? dateFmt.format(new Date(iso)) : "—");
 export const formatDateTime = iso => (iso ? dateTimeFmt.format(new Date(iso)) : "—");
 export const formatTime = iso => (iso ? timeFmt.format(new Date(iso)) : "");

@@ -19,8 +19,8 @@ function buildUrl(path, query) {
   return `${BASE_URL}${path}${qs ? `?${qs}` : ""}`;
 }
 
-async function send(method, path, { body, query, token, keepalive }) {
-  const headers = { Accept: "application/json, application/problem+json" };
+async function send(method, path, { body, query, token, keepalive, accept }) {
+  const headers = { Accept: accept || "application/json, application/problem+json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
   try {
@@ -30,8 +30,17 @@ async function send(method, path, { body, query, token, keepalive }) {
   }
 }
 
-async function parse(response) {
+/** Content-Disposition → dosya adı (RFC 5987 `filename*` önceliklidir). */
+function filenameOf(response) {
+  const cd = response.headers.get("Content-Disposition") || "";
+  const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  if (star) { try { return decodeURIComponent(star[1]); } catch { /* düz adı dene */ } }
+  return cd.match(/filename="?([^";]+)"?/i)?.[1] || null;
+}
+
+async function parse(response, responseType) {
   if (!response.ok) throw await toApiError(response);
+  if (responseType === "blob") return { blob: await response.blob(), filename: filenameOf(response) };
   if (response.status === 204) return null;
   const text = await response.text();
   return text ? JSON.parse(text) : null;
@@ -58,11 +67,13 @@ export function refreshAdminSession() {
 /**
  * Tek API giriş noktası.
  * auth: "admin" (varsayılan) | "user" (katılımcı) | false (public)
+ * responseType: "json" (varsayılan) | "blob" (dosya indirme → { blob, filename })
  * Hata durumunda her zaman ApiError fırlatır.
  */
-export async function request(method, path, { body, query, auth = "admin", keepalive } = {}) {
+export async function request(method, path, { body, query, auth = "admin", keepalive, responseType } = {}) {
   const tokenFor = () => (auth === "admin" ? tokenStore.getAdmin()?.accessToken : auth === "user" ? tokenStore.getParticipant()?.accessToken : null);
-  let response = await send(method, path, { body, query, token: tokenFor(), keepalive });
+  const accept = responseType === "blob" ? "*/*" : undefined;
+  let response = await send(method, path, { body, query, token: tokenFor(), keepalive, accept });
 
   if (response.status === 401 && auth === "admin" && tokenStore.getAdmin()?.refreshToken) {
     try {
@@ -72,9 +83,9 @@ export async function request(method, path, { body, query, auth = "admin", keepa
       sessionExpiredHandler();
       throw e instanceof ApiError && e.code !== "NETWORK_ERROR" ? new ApiError({ status: 401, code: "SESSION_EXPIRED" }) : e;
     }
-    response = await send(method, path, { body, query, token: tokenFor() });
+    response = await send(method, path, { body, query, token: tokenFor(), accept });
   }
-  return parse(response);
+  return parse(response, responseType);
 }
 
 export const api = {
