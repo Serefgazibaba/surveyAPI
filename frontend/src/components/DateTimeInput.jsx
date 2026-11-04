@@ -1,15 +1,12 @@
 import { useState } from "react";
 import DateInput from "./DateInput.jsx";
+import TimeInput from "./TimeInput.jsx";
 import { toZonedInput, fromZonedInput, todayYmd } from "../utils/datetime.js";
-
-const pad = n => String(n).padStart(2, "0");
-const HOURS = Array.from({ length: 24 }, (_, i) => pad(i));
-const MINUTES = Array.from({ length: 60 }, (_, i) => pad(i));
 
 /**
  * Tarih + saat girişi. Değer UTC ISO string'dir; kullanıcı İstanbul saatiyle girer.
- * Tarih GG.AA.YYYY (DateInput), saat 24 saat biçimindedir: tarayıcının yerel saat seçicisi (input type="time") işletim sistemi diline göre
- * AM/PM gösterebildiği için saat ve dakika ayrı listelerden seçilir.
+ * Tarih GG.AA.YYYY (DateInput), saat 24 saat biçiminde (TimeInput). Tarayıcının yerel tarih/saat seçicileri işletim
+ * sistemi diline göre biçim (mm/dd/yyyy, AM/PM) gösterdiği için kullanılmaz.
  * Saat otomatik doldurulmaz: tarih, saat ve dakika girilene kadar onChange(null) çağrılır;
  * yarım giriş bileşenin içinde korunur.
  * onChange(isoOrNull)
@@ -38,16 +35,6 @@ export default function DateTimeInput({ value, onChange, disabled, invalid = fal
 
   return <div className="two-inputs">
     <DateInput value={local.date} min={todayYmd()} invalid={invalid} disabled={disabled} onChange={date => update({ date })} />
-    <div className={`time-24${invalid ? " has-error" : ""}`}>
-      <select aria-label="Saat" value={local.hour} disabled={disabled} onChange={e => update({ hour: e.target.value })}>
-        <option value="">SS</option>
-        {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
-      </select>
-      <span aria-hidden="true">:</span>
-      <select aria-label="Dakika" value={local.minute} disabled={disabled} onChange={e => update({ minute: e.target.value })}>
-        <option value="">DD</option>
-        {MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
-      </select>
-    </div>
+    <TimeInput hour={local.hour} minute={local.minute} invalid={invalid} disabled={disabled} onChange={update} />
   </div>;
 }

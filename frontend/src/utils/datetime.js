@@ -19,6 +19,13 @@ export function toZonedInput(iso) {
   return { date: `${p.year}-${pad(p.month)}-${pad(p.day)}`, time: `${pad(p.hour)}:${pad(p.minute)}` };
 }
 
+/** Şu anki İstanbul saati → { hour: "HH", minute: "mm" }. */
+export function nowIstanbulTime() {
+  const p = zonedParts(new Date());
+  const pad = n => String(n).padStart(2, "0");
+  return { hour: pad(p.hour), minute: pad(p.minute) };
+}
+
 /** Bugünün tarihi (İstanbul) → "YYYY-MM-DD". */
 export function todayYmd() {
   const p = zonedParts(new Date());
