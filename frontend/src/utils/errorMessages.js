@@ -95,6 +95,8 @@ const FIELD_LABELS = {
   email: "E-posta",
   password: "Şifre",
   userIds: "Katılımcılar",
+  participants: "Katılımcılar",
+  fullName: "Ad Soyad",
   emailIds: "Mailler",
   sort: "Sıralama",
 };

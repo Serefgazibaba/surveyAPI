@@ -141,3 +141,13 @@ html,body{margin:0}
 .calendar-day.today{color:var(--primary);font-weight:700}
 .calendar-day.selected{background:var(--primary);color:#fff}
 .calendar-day:disabled{color:#D0D5DD;cursor:not-allowed}
+
+/* Katılımcılar: e-posta ile ekleme */
+.participant-section{display:flex;flex-direction:column;gap:8px;padding-top:4px;border-top:1px solid var(--border)}
+.participant-section>b{padding-top:14px;font-size:14px}
+.add-by-email{display:flex;flex-direction:column;gap:6px}
+.add-by-email-row{display:grid;grid-template-columns:1fr 1.3fr auto;gap:8px}
+@media(max-width:640px){.add-by-email-row{grid-template-columns:1fr}}
+.chip-item.external{background:#F2F4F7;color:#344054}
+.chip-tag{font-weight:400;color:var(--muted);font-size:11px}
+.section-title{font-size:15px;margin:8px 0 -4px}

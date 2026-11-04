@@ -10,6 +10,7 @@ import { formatDateTime } from "../../utils/datetime.js";
 const columns = [
   { key: "fullName", header: "Ad Soyad", className: "title-cell" },
   { key: "email", header: "E-posta" },
+  { key: "kind", header: "Tür", render: r => (r.userId ? "Kayıtlı kullanıcı" : "Dış katılımcı") },
   { key: "emailStatus", header: "E-posta Durumu", render: r => <StatusBadge kind="email" value={r.emailStatus} /> },
 ];
 
@@ -32,7 +33,7 @@ export default function PublishResultPage() {
         </StateCard>
       : <StateCard tone="info" title="Anket yayınlandı" actions={actions}>Davetlerin güncel durumunu Gönderim Durumu ekranından takip edebilirsiniz.</StateCard>}
     {result?.invitations?.length > 0 && <div className="mt">
-      <DataTable columns={columns} rows={result.invitations} rowKey={r => r.userId} />
+      <DataTable columns={columns} rows={result.invitations} rowKey={r => r.participantId} />
     </div>}
   </Shell>;
 }
