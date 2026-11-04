@@ -9,6 +9,8 @@ import SurveyBuilderPage from "./pages/admin/SurveyBuilderPage.jsx";
 import ParticipantsPage from "./pages/admin/ParticipantsPage.jsx";
 import PublishResultPage from "./pages/admin/PublishResultPage.jsx";
 import MailsPage from "./pages/admin/MailsPage.jsx";
+import TemplateListPage from "./pages/admin/TemplateListPage.jsx";
+import TemplateBuilderPage from "./pages/admin/TemplateBuilderPage.jsx";
 import InviteLandingPage from "./pages/participant/InviteLandingPage.jsx";
 import SurveyFormPage from "./pages/participant/SurveyFormPage.jsx";
 import ThanksPage from "./pages/participant/ThanksPage.jsx";
@@ -18,6 +20,11 @@ import AccessErrorPage from "./pages/participant/AccessErrorPage.jsx";
 function BuilderRoute() {
   const { id } = useParams();
   return <SurveyBuilderPage key={id || "new"} />;
+}
+
+function TemplateBuilderRoute() {
+  const { id } = useParams();
+  return <TemplateBuilderPage key={id || "new"} />;
 }
 
 export default function App() {
@@ -35,6 +42,9 @@ export default function App() {
               <Route path="/surveys/:id/participants" element={<ParticipantsPage />} />
               <Route path="/surveys/:id/published" element={<PublishResultPage />} />
               <Route path="/mails" element={<MailsPage />} />
+              <Route path="/templates" element={<TemplateListPage />} />
+              <Route path="/templates/new" element={<TemplateBuilderRoute />} />
+              <Route path="/templates/:id/edit" element={<TemplateBuilderRoute />} />
             </Route>
 
             {/* Katılımcı (davet linki: {FRONTEND_BASE_URL}/s/{token}) */}

@@ -45,3 +45,6 @@ a.nav-item,a.btn{text-decoration:none;color:inherit}a.btn.primary{color:#fff}.br
 .actions{flex-wrap:nowrap}.survey-tool td.right{white-space:nowrap}
 .state-icon.error{box-shadow:0 0 0 8px #FFF6F5}.state-icon.warning{box-shadow:0 0 0 8px #FFFCF5}.state-icon.info{box-shadow:0 0 0 8px #F3F6FE}
 .survey-tool .text-danger{color:var(--danger)}
+
+/* Şablonlar */
+.template-card h2{overflow-wrap:anywhere}.template-description{margin:0;color:#475467;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.template-card .template-use{margin-top:auto}

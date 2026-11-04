@@ -50,6 +50,8 @@ tags:
     description: Ankete davet edilecek kullanıcılar
   - name: Admin - Mails
     description: Davet mailleri; durum listesi ve yeniden gönderim
+  - name: Admin - Templates
+    description: Anket şablonları; anketten kaydetme, düzenleme ve şablondan anket oluşturma
   - name: Admin - Reports
     description: Anket raporu ve dışa aktarım
   - name: User - Auth
@@ -667,6 +669,232 @@ paths:
                     code: NOT_FAILED
                     message: Mail gönderilemeyen durumda değil
 
+  /admin/saveAsTemplate:
+    post:
+      tags: [Admin - Templates]
+      operationId: adminSaveAsTemplate
+      summary: Anketi şablon olarak kaydet
+      description: |
+        Anketin o anki başlık, açıklama ve sorularından yeni şablon oluşturur (FR-30). Her durumdaki anket (taslak dahil)
+        kaydedilebilir; içerik tam olmak zorunda değildir.
+        - Şablona yalnızca sorular (metin, tip, zorunluluk, ayarlar, seçenek etiketleri ve sıraları) alınır;
+          katılımcılar, bitiş tarihi, yanıt modu ve yanıtlar alınmaz.
+        - `name` boşsa anketin başlığı, `description` boşsa anketin açıklaması kullanılır.
+        - Şablon bir **snapshot**'tır: kaynak anket sonradan değişse veya silinse şablon değişmez.
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveAsTemplateRequest'
+            example:
+              surveyId: 9a7d3c21-4b8e-4f0a-a1c2-7e5d9b3f2a68
+              name: Eğitim Değerlendirme
+      responses:
+        '201':
+          description: Şablon oluşturuldu
+          headers:
+            Location:
+              description: Oluşturulan şablonun adresi (`/admin/templates/{templateId}`)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/upsertTemplate:
+    post:
+      tags: [Admin - Templates]
+      operationId: adminUpsertTemplate
+      summary: Şablonu kaydet (upsert: oluştur / güncelle)
+      description: |
+        Şablon ekranındaki "Kaydet" (FR-31). "Yeni şablon" ekranı da bu ucu kullanır.
+        - Gövdede `id` yoksa yeni şablon oluşturulur → `201` + `Location`. `id` varsa şablon güncellenir → `200`;
+          şablon yoksa veya başka bir admin'e aitse `404 TEMPLATE_NOT_FOUND`.
+        - `questions` şablonun sorularının **tamamıdır**; mevcut içerik bu listeyle değiştirilir. Şablon snapshot
+          olduğu için soru ve seçeneklerin id'si yoktur; dizi sırası = soru / seçenek sırası.
+        - Doğrulama anket taslağıyla aynıdır: yalnızca `name` zorunludur; `settings` tipe göre doğrulanır ve
+          varsayılanlarla tamamlanır (`400`); seçenekler yalnızca seçimli tiplerde gönderilir (`422 INVALID_STRUCTURE`).
+          Tamlık, şablondan üretilen anket yayınlanırken kontrol edilir.
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateSaveRequest'
+            example:
+              name: Eğitim Değerlendirme
+              description: Eğitim sonrası katılımcı geri bildirimi
+              questions:
+                - text: Eğitim içeriği yeterliydi.
+                  type: LIKERT
+                  required: true
+                - text: En faydalı bulduğunuz konular?
+                  type: MULTIPLE_CHOICE
+                  settings:
+                    maxSelect: 2
+                  options:
+                    - label: Spring Boot
+                    - label: Hazelcast
+                - text: Eklemek istedikleriniz
+                  type: FREE_TEXT
+      responses:
+        '200':
+          description: Şablon güncellendi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+        '201':
+          description: Şablon oluşturuldu
+          headers:
+            Location:
+              description: Oluşturulan şablonun adresi
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: '`INVALID_STRUCTURE`: seçimli olmayan tipe seçenek gönderildi'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://survey.example.com/problems/invalid-structure
+                title: Şablon yapısı geçersiz
+                status: 422
+                code: INVALID_STRUCTURE
+                errors:
+                  - field: questions[2].options
+                    code: NOT_ALLOWED
+                    message: Seçenekler yalnızca SINGLE_CHOICE ve MULTIPLE_CHOICE sorularında gönderilir
+
+  /admin/templates:
+    get:
+      tags: [Admin - Templates]
+      operationId: adminListTemplates
+      summary: Şablonları listele
+      description: Admin'in kendi şablonlarını son güncellenene göre sayfalı döner (FR-31). Şablonlar kişiseldir; başka admin'lerin şablonları listelenmez.
+      security:
+        - adminAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: Şablon adında arama (büyük/küçük harf duyarsız)
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Şablon listesi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/templates/{templateId}:
+    parameters:
+      - $ref: '#/components/parameters/TemplateId'
+    get:
+      tags: [Admin - Templates]
+      operationId: adminGetTemplate
+      summary: Şablonu getir
+      description: Şablonu sorularıyla döner. Başka admin'in şablonu `404 TEMPLATE_NOT_FOUND`.
+      security:
+        - adminAuth: []
+      responses:
+        '200':
+          description: Şablon detayı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin - Templates]
+      operationId: adminDeleteTemplate
+      summary: Şablonu sil
+      description: Şablonu kalıcı olarak siler. Şablondan daha önce oluşturulmuş anketler etkilenmez (FR-31).
+      security:
+        - adminAuth: []
+      responses:
+        '204':
+          description: Şablon silindi
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/createSurveyFromTemplate:
+    post:
+      tags: [Admin - Templates]
+      operationId: adminCreateSurveyFromTemplate
+      summary: Şablondan anket oluştur
+      description: |
+        Şablonun içeriğiyle yeni **taslak** (`DRAFT`) anket oluşturur. Sorular ve seçenekler yeni id'lerle yazılır;
+        yanıt `upsertSurvey` ile aynıdır ve anket bundan sonra `upsertSurvey` ile düzenlenir.
+        - `title` boşsa şablonun adı kullanılır; açıklama şablondan alınır.
+        - Bitiş tarihi ve yanıt modu boş gelir; yayınlamadan önce doldurulur.
+        - Anket ile şablon arasında bağ tutulmaz: şablon sonradan değişse veya silinse anket etkilenmez.
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSurveyFromTemplateRequest'
+            example:
+              templateId: 5c1e8f3a-2b7d-4e9a-b6c4-1d3f5a7e9b20
+              title: Eğitim Değerlendirme — Kasım 2026
+      responses:
+        '201':
+          description: Taslak anket oluşturuldu
+          headers:
+            Location:
+              description: Oluşturulan anketin adresi (`/admin/surveys/{surveyId}`)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurveyDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /admin/surveys/{surveyId}/report:
     parameters:
       - $ref: '#/components/parameters/SurveyId'
@@ -1026,6 +1254,13 @@ components:
   parameters:
     SurveyId:
       name: surveyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TemplateId:
+      name: templateId
       in: path
       required: true
       schema:
@@ -1623,6 +1858,159 @@ components:
           nullable: true
         sortOrder:
           type: integer
+
+    # ---------- Templates ----------
+    SaveAsTemplateRequest:
+      type: object
+      required: [surveyId]
+      properties:
+        surveyId:
+          type: string
+          format: uuid
+          description: Kaynak anket (Admin'in kendi anketi)
+        name:
+          type: string
+          maxLength: 200
+          description: Boşsa anketin başlığı kullanılır
+        description:
+          type: string
+          maxLength: 2000
+          description: Boşsa anketin açıklaması kullanılır
+    TemplateSaveRequest:
+      type: object
+      description: Upsert gövdesi. Yalnızca `name` zorunludur.
+      required: [name]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Yoksa yeni şablon oluşturulur; varsa bu şablon güncellenir
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+        questions:
+          type: array
+          maxItems: 200
+          description: Şablonun sorularının tamamı; dizi sırası = soru sırası
+          items:
+            $ref: '#/components/schemas/TemplateQuestionInput'
+    TemplateQuestionInput:
+      type: object
+      description: |
+        Anket taslağındaki gibi tüm alanlar boş olabilir. `settings` yalnızca `type` doluyken gönderilir ve
+        varsayılanlarla tamamlanır; `options` yalnızca `SINGLE_CHOICE` ve `MULTIPLE_CHOICE` için gönderilir.
+      properties:
+        text:
+          type: string
+          maxLength: 1000
+        type:
+          $ref: '#/components/schemas/QuestionType'
+        required:
+          type: boolean
+          default: false
+        settings:
+          $ref: '#/components/schemas/QuestionSettings'
+        options:
+          type: array
+          maxItems: 100
+          description: Dizi sırası = seçenek sırası
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+                maxLength: 200
+    CreateSurveyFromTemplateRequest:
+      type: object
+      required: [templateId]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 200
+          description: Boşsa şablonun adı kullanılır
+    TemplateSummary:
+      type: object
+      description: Değeri olmayan (null) alanlar yanıtta yer almaz.
+      required: [id, name, questionCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        questionCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TemplateListResponse:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateSummary'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+    TemplateDetail:
+      allOf:
+        - $ref: '#/components/schemas/TemplateSummary'
+        - type: object
+          required: [questions]
+          properties:
+            questions:
+              type: array
+              items:
+                $ref: '#/components/schemas/TemplateQuestion'
+    TemplateQuestion:
+      type: object
+      description: Şablon sorusu; kimlik taşımaz. Taslakta `text`, `type` ve `settings` boş olabilir.
+      required: [number, required, options]
+      properties:
+        number:
+          type: integer
+          description: Şablonda görünen soru numarası (1'den başlar)
+        text:
+          type: string
+          nullable: true
+        type:
+          allOf:
+            - $ref: '#/components/schemas/QuestionType'
+          nullable: true
+        required:
+          type: boolean
+        settings:
+          allOf:
+            - $ref: '#/components/schemas/QuestionSettings'
+          nullable: true
+          description: Tip seçiliyse varsayılanlarla tamamlanmış ayarlar
+        options:
+          type: array
+          description: Yalnızca `SINGLE_CHOICE` ve `MULTIPLE_CHOICE` için dolu
+          items:
+            type: object
+            required: [sortOrder]
+            properties:
+              label:
+                type: string
+                nullable: true
+              sortOrder:
+                type: integer
+                description: 0'dan başlar
 
     # ---------- Users / Publish ----------
     UserSummary:

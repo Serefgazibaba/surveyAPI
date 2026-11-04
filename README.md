@@ -119,6 +119,7 @@ com.definex.survey
 ├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
 ├─ auth/        /admin/auth/*, /admin/getAllUsers
 ├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey, /admin/getMails, /admin/resendMails
+├─ template/    /admin/templates/*, /admin/saveAsTemplate, /admin/upsertTemplate, /admin/createSurveyFromTemplate
 ├─ report/      /admin/surveys/{surveyId}/report*
 └─ user/        katılımcı tarafı: /user/auth/login, /user/surveys/* (form, ara kayıt, gönderim); responses, answers
 ```
@@ -276,6 +277,42 @@ Yayınlamadan önce tamlık kontrol edilir; eksikler tek seferde döner:
 | Anket taslak değil (tekrar yayınlama dahil) | 409 | `INVALID_SURVEY_STATUS` |
 
 Yayındaki anketin bitiş tarihi geçince durum en geç bir dakika içinde otomatik olarak `EXPIRED` olur.
+
+## Örnek istekler (Şablonlar)
+
+Şablon, anketin başlık, açıklama ve sorularının kopyasıdır (katılımcı, bitiş tarihi, yanıt modu ve yanıtlar girmez).
+Kaynak anket sonradan değişse veya silinse şablon değişmez; şablon silinse ondan üretilen anketler etkilenmez.
+Şablonlar kişiseldir: her Admin yalnızca kendi şablonlarını görür.
+
+```bash
+# 1. Anketi şablon olarak kaydet → 201 (name/description boşsa anketinkiler kullanılır)
+curl -s -X POST http://localhost:8080/api/v1/admin/saveAsTemplate \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"surveyId":"<surveyId>","name":"Eğitim Değerlendirme"}'
+
+# 2. Şablonlar (ad araması, sayfalı) ve detay
+curl -s "http://localhost:8080/api/v1/admin/templates?q=eğitim&page=1&size=20" -H "Authorization: Bearer <accessToken>"
+curl -s http://localhost:8080/api/v1/admin/templates/<templateId> -H "Authorization: Bearer <accessToken>"
+
+# 3. Şablonu düzenle (upsert: id yoksa yeni şablon); questions şablonun sorularının tamamıdır
+curl -s -X POST http://localhost:8080/api/v1/admin/upsertTemplate \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"id":"<templateId>","name":"Eğitim Değerlendirme","questions":[{"text":"İçerik yeterliydi.","type":"LIKERT","required":true}]}'
+
+# 4. Şablondan yeni taslak anket → 201; yanıt upsertSurvey ile aynı, sonra upsertSurvey ile düzenlenir
+curl -s -X POST http://localhost:8080/api/v1/admin/createSurveyFromTemplate \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"templateId":"<templateId>","title":"Eğitim Değerlendirme — Kasım"}'
+
+# 5. Sil → 204
+curl -s -X DELETE http://localhost:8080/api/v1/admin/templates/<templateId> -H "Authorization: Bearer <accessToken>"
+```
+
+| Durum | HTTP | `code` |
+|---|---|---|
+| Şablon yok veya başka Admin'e ait | 404 | `TEMPLATE_NOT_FOUND` |
+| `name` boş, ayar tipe uymuyor | 400 | `VALIDATION_ERROR` |
+| Seçimli olmayan soruya seçenek | 422 | `INVALID_STRUCTURE` |
 
 ## Davet mailleri
 
