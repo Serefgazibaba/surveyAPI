@@ -145,20 +145,20 @@ Katılımcı erişim kuralları (user auth'ta uygulanacak): bitiş tarihi geçti
 > Token geçerliliği ayrı kolonda tutulmaz; `surveys.ends_at`’ten türetilir. Böylece süre uzatmada (FR-51) tüm tokenlar kendiliğinden güncellenir.
 
 #### T13 `response_drafts`
-invitation_id PK/FK, answers (json), current_question_id NULL, started_at, updated_at.
+id PK, invitation_id UNIQUE (her davetin tek ara kaydı), survey_id, current_question_id NULL (kaldığı soru), answers (jsonb — `AnswerInput` listesi), created_at (süre hesabının başlangıcı), updated_at (= `savedAt`). Her ara kayıt öncekinin yerine geçer.
 
 > **Tasarım kararı (BR-06 / Q-03):** Ara kayıt davete bağlı olmak zorunda (kaldığı yerden devam). Anonim modda yanıt ile kimlik arasında ilişki kalmaması için gönderimde taslak `responses`/`answers`’a kopyalanır ve taslak **silinir**; anonim modda `responses.invitation_id` boş kalır.
 
 #### T14 `responses`
-id, survey_id FK, invitation_id FK NULL (yalnızca `IDENTIFIED` modda dolu, UNIQUE), started_at, submitted_at, duration_seconds.
+id, survey_id, invitation_id NULL (yalnızca `IDENTIFIED` modda dolu, UNIQUE), submitted_at, duration_seconds NULL (ilk ara kayıttan gönderime; ara kayıt yoksa NULL), created_at, updated_at.
 
-> Anonim modda `submitted_at` ile `invitations.completed_at` eşleştirilerek kimlik çıkarımı yapılabilir; anonim modda `submitted_at` saat/gün hassasiyetine yuvarlanması önerilir.
+> **Anonim mod (BR-06):** `submitted_at` ile `invitations.completed_at` eşleştirilerek kimlik çıkarımı yapılabileceği için anonim modda `submitted_at` **saat başına yuvarlanır**; kayıtlı modda tam zaman saklanır. Gönderim tek transaction'dır: davet satırı kilitlenir (eşzamanlı ikinci gönderim 409 alır), yanıt yazılır, ara kayıt silinir, davet `COMPLETED` olur.
 
 #### T15 `answers`
-id, response_id FK, question_id FK, numeric_value NULL (Likert), text_value NULL (serbest metin / “Diğer”). UNIQUE (response_id, question_id).
+id, response_id FK, question_id (soru kimliği; modül sınırı nedeniyle FK yok), numeric_value NULL (Likert), text_value NULL (serbest metin / “Diğer”). UNIQUE (response_id, question_id). Yanıtlanmamış sorular için satır yazılmaz.
 
 #### T16 `answer_options`
-answer_id FK, option_id FK. PK (answer_id, option_id).
+answer_id FK, option_id (seçenek kimliği). PK (answer_id, option_id).
 
 #### T17 `email_templates`
 id, survey_id FK NULL (NULL = sistem varsayılanı), type (`INVITATION`, `REMINDER`, `DEADLINE_EXTENDED`, `DISPATCH_SUMMARY`, `SURVEY_CLOSED`), subject, body. Değişkenler: `{ad}`, `{anket_adi}`, `{link}`, `{son_tarih}`.
@@ -296,8 +296,8 @@ Katılımcı seçimi ve davet oluşturma API-25a ve API-26, mail takibi ve yenid
 |---|---|---|---|---|
 | API-79 | POST | `/user/auth/login` | Davet token'ını ankete bağlı katılımcı token'ına çevirir (`exp` = anket bitişi, refresh yok). Hata: geçersiz/iptal 401, süresi doldu/kapalı 410, zaten yanıtlandı 409 | FR-60, FR-65, AS-01–03 |
 | API-80 | GET | `/user/surveys/{surveyId}` | Anket formu (yalnızca token'ın anketi); erişim kuralları her istekte yeniden uygulanır | FR-60, FR-61, FR-67 |
-| API-81 | PUT | `/user/surveys/{surveyId}/draft` | Ara kayıt (henüz yok) | FR-63, AS-02 |
-| API-82 | POST | `/user/surveys/{surveyId}/submit` | Zorunlu alan kontrolü, yanıtı kesinleştir, daveti tüket (henüz yok) | FR-62, FR-64, BR-01–03 |
+| API-81 | PUT | `/user/surveys/{surveyId}/draft` | Ara kayıt (tamamının yerine geçer; yalnızca değer kontrolü); formda `draft` olarak döner | FR-63, AS-02 |
+| API-82 | POST | `/user/surveys/{surveyId}/submit` | Değer + zorunlu alan kontrolü, yanıtı kesinleştir, daveti `COMPLETED` yap; anonim modda bağ yok + saat yuvarlama | FR-62, FR-64, BR-01–03, BR-06 |
 
 ### 2.9 Raporlama ve Dışa Aktarım (S-07)
 | ID | Metot | Yol | Açıklama | Ref |

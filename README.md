@@ -82,7 +82,7 @@ com.definex.survey
 ├─ auth/        /admin/auth/*, /admin/getAllUsers
 ├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey, /admin/getMails, /admin/resendMails
 ├─ report/      /admin/surveys/{surveyId}/report*
-└─ user/        katılımcı tarafı: /user/auth/login (davet token'ı ile), /user/surveys/* (form; ara kayıt ve gönderim sonraki adım)
+└─ user/        katılımcı tarafı: /user/auth/login, /user/surveys/* (form, ara kayıt, gönderim); responses, answers
 ```
 
 Her iş modülü aynı alt paketleri taşır: `controller/ service/ repository/ entity/ dto/`.
@@ -290,9 +290,24 @@ geçer. Ön yüz linkteki token'ı login ucuna gönderir; hangi anket olduğu su
 curl -s -X POST http://localhost:8080/api/v1/user/auth/login \
   -H "Content-Type: application/json" -d '{"invitationToken":"<linkteki token>"}'
 
-# 2. Anket formu (yalnızca token'ın bağlı olduğu anket)
+# 2. Anket formu (yalnızca token'ın bağlı olduğu anket); daha önce ara kayıt yapıldıysa "draft" alanında döner
 curl -s http://localhost:8080/api/v1/user/surveys/<surveyId> -H "Authorization: Bearer <accessToken>"
+
+# 3. Ara kayıt (soru geçişlerinde; tamamının yerine geçer, zorunlu kontrolü yok)
+curl -s -X PUT http://localhost:8080/api/v1/user/surveys/<surveyId>/draft \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"currentQuestionId":"<questionId>","answers":[{"questionId":"<likertId>","numericValue":4}]}'
+
+# 4. Gönder → davet COMPLETED olur; bu link ve token ile sonraki istekler 409 alır
+curl -s -X POST http://localhost:8080/api/v1/user/surveys/<surveyId>/submit \
+  -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
+  -d '{"answers":[{"questionId":"<likertId>","numericValue":5},{"questionId":"<cokluSecimId>","optionIds":["<optionId>"]},{"questionId":"<metinId>","text":"Teşekkürler"}]}'
 ```
+
+**Cevap biçimi:** Likert → `numericValue` (1..scale); tek/çoklu seçim → `optionIds` ve/veya ("Diğer" açıksa)
+`otherText`; serbest metin → `text`. Uymayan değerler `422 INVALID_ANSWERS`, eksik zorunlu sorular
+`422 REQUIRED_ANSWERS_MISSING` (`errors[].field` = soru id'si) döner.
+**Anonim ankette** yanıt davetle ilişkilendirilmez ve gönderim zamanı saat başına yuvarlanır (BR-06).
 
 - **Token:** `sub` = kullanıcı, `roles` = `[USER]`, `inv` = davet, `svy` = anket, `exp` = **anketin bitiş tarihi**.
   Refresh yoktur; token kaybolursa katılımcı maildeki linke tekrar tıklar.

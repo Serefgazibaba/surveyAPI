@@ -5,6 +5,7 @@ import com.definex.survey.survey.dto.InvitationContext;
 import com.definex.survey.survey.dto.ParticipantSurveyForm;
 import com.definex.survey.survey.entity.ResponseMode;
 import com.definex.survey.survey.service.ParticipantInvitationService;
+import com.definex.survey.user.dto.UserDraft;
 import com.definex.survey.user.dto.UserSurveyResponse;
 import java.time.Clock;
 import java.util.UUID;
@@ -18,10 +19,12 @@ public class UserSurveyService {
             "Yanıtlarınız anonim olarak toplanmaktadır; kimliğinizle ilişkilendirilmez.";
 
     private final ParticipantInvitationService invitations;
+    private final UserResponseService responses;
     private final Clock clock;
 
-    public UserSurveyService(ParticipantInvitationService invitations, Clock clock) {
+    public UserSurveyService(ParticipantInvitationService invitations, UserResponseService responses, Clock clock) {
         this.invitations = invitations;
+        this.responses = responses;
         this.clock = clock;
     }
 
@@ -42,6 +45,8 @@ public class UserSurveyService {
                                 q.required(), q.settings(),
                                 q.options().stream().map(o -> new UserSurveyResponse.Option(o.id(), o.label())).toList()))
                         .toList(),
-                null);
+                responses.findDraft(invitation.invitationId())
+                        .map(d -> new UserDraft(d.getCurrentQuestionId(), d.getAnswers(), d.getUpdatedAt()))
+                        .orElse(null));
     }
 }

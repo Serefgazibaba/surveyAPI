@@ -7,9 +7,11 @@ import com.definex.survey.survey.entity.Invitation;
 import com.definex.survey.survey.entity.Survey;
 import com.definex.survey.survey.repository.InvitationRepository;
 import com.definex.survey.survey.repository.SurveyRepository;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -47,6 +49,21 @@ public class ParticipantInvitationService {
         Invitation invitation = invitationRepository.findWithSurveyById(invitationId).orElseThrow();
         invitation.markStarted();
         return toContext(invitation);
+    }
+
+    /**
+     * Yanıt gönderimi için daveti kilitler (çağıranın transaction'ı boyunca). Eşzamanlı ikinci gönderim kilidi
+     * bekler ve ardından davetin {@code COMPLETED} olduğunu görür.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<InvitationContext> lockForSubmit(UUID invitationId) {
+        return invitationRepository.findForUpdateById(invitationId).map(ParticipantInvitationService::toContext);
+    }
+
+    /** Yanıt gönderildi: davet {@code COMPLETED} olur ve bir daha kullanılamaz. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void markCompleted(UUID invitationId, Instant now) {
+        invitationRepository.findById(invitationId).orElseThrow().markCompleted(now);
     }
 
     @Transactional(readOnly = true)

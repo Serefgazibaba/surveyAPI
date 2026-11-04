@@ -62,6 +62,12 @@ public class Invitation extends BaseEntity {
         }
     }
 
+    /** Yanıt gönderildi; davet bir daha kullanılamaz (BR-01). */
+    public void markCompleted(Instant now) {
+        this.status = InvitationStatus.COMPLETED;
+        this.completedAt = now;
+    }
+
     /** Yeniden gönderimde yeni token; eski link geçersiz olur. */
     public void rotateToken(String newTokenHash) {
         this.tokenHash = newTokenHash;
