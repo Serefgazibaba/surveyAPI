@@ -151,3 +151,46 @@ html,body{margin:0}
 .chip-item.external{background:#F2F4F7;color:#344054}
 .chip-tag{font-weight:400;color:var(--muted);font-size:11px}
 .section-title{font-size:15px;margin:8px 0 -4px}
+
+/* Giriş ekranı: solda 3B anket sahnesi, sağda form */
+.survey-tool .login-screen{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);min-height:100vh;background:#fff}
+.login-scene{position:relative;overflow:hidden;background:#F5F8FF;border-right:1px solid var(--border);display:block;padding:0;color:inherit}
+.login-scene:after{display:none}
+.login-scene-logo{position:absolute;top:32px;left:36px;z-index:2}
+.login-form{display:grid;place-items:center;padding:32px 24px}
+.login-form form{width:360px;max-width:100%;display:flex;flex-direction:column;gap:16px}
+.login-form h1{font-size:24px}
+.login-form .login-form-logo{display:none;margin-bottom:8px}
+.login-copyright{color:var(--subtle);font-size:12px;margin-top:8px}
+.password-toggle{border:0;background:transparent;color:var(--muted);width:28px;height:28px;margin-right:-6px;border-radius:6px;display:grid;place-items:center;cursor:pointer}
+.password-toggle:hover{background:#F2F4F7;color:var(--text)}
+.password-toggle .i{color:inherit}
+.login-scene-stage{position:absolute;inset:0;perspective:1100px}
+.login-scene-rig{position:absolute;left:54%;top:54%;width:0;height:0;transform-style:preserve-3d;transform:rotateX(58deg) rotateZ(-38deg) scale(1.15);animation:login-spin 18s ease-in-out infinite alternate}
+.login-scene-floor{position:absolute;width:250px;height:250px;left:-125px;top:-125px;border-radius:14px;background:#DDE6FB;transform:translateZ(-2px)}
+.login-scene-card{position:absolute;background:#fff;border:1px solid #DCE4FA;border-radius:12px;padding:11px 13px;transform-style:preserve-3d;animation:login-float 6s ease-in-out infinite}
+.login-scene-card .row{display:flex;align-items:center;gap:7px}
+.login-scene-card .num{width:18px;height:18px;border-radius:5px;background:var(--primary);color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center}
+.login-scene-card .line{display:block;height:6px;border-radius:3px;background:#E7EDFC}
+.login-scene-card .line.strong{background:#C9D6F8}
+.login-scene-card .likert{display:flex;justify-content:space-between;margin-top:10px}
+.login-scene-card .dot{width:14px;height:14px;border-radius:50%;border:1.5px solid #B9CAF6}
+.login-scene-card .dot.on{background:var(--primary);border-color:var(--primary)}
+.login-scene-card .bars{display:flex;align-items:flex-end;gap:6px;height:54px}
+.login-scene-card .bar{flex:1;border-radius:4px 4px 0 0;background:#D5E0FA}
+.login-scene-card .bar.b1{background:#B9CAF6}.login-scene-card .bar.b2{background:var(--primary)}.login-scene-card .bar.b3{background:#7F98E6}
+.login-scene-card .score{font-size:15px;font-weight:700;margin-top:6px}
+.login-scene-card .score small{font-size:10px;font-weight:500;color:var(--muted)}
+.login-scene-card .checks{display:flex;flex-direction:column;gap:7px}
+.login-scene-card .box{width:13px;height:13px;border-radius:4px;border:1.5px solid #B9CAF6}
+.login-scene-card .box.on{background:var(--primary);border-color:var(--primary)}
+.login-scene-card .rate{text-align:right;font-size:10px;font-weight:600;color:var(--success);margin-bottom:6px}
+.login-scene-card .progress-track{height:6px;border-radius:3px;background:#E7EDFC;overflow:hidden}
+.login-scene-card .progress-track span{display:block;height:100%;border-radius:3px;background:var(--success)}
+@keyframes login-spin{0%{transform:rotateX(58deg) rotateZ(-44deg) scale(1.15)}100%{transform:rotateX(52deg) rotateZ(-26deg) scale(1.15)}}
+@keyframes login-float{0%,100%{translate:0 0 var(--z)}50%{translate:0 0 calc(var(--z) + 18px)}}
+@media (prefers-reduced-motion:reduce){.login-scene-rig,.login-scene-card{animation:none}}
+@media (max-width:900px){.survey-tool .login-screen{grid-template-columns:1fr}.login-scene{display:none}.login-form .login-form-logo{display:inline-flex}}
+/* AnketX logosu: yazı + X işareti bitişik, X büyük harf yüksekliğinde */
+.brand-logo{display:inline-flex;align-items:baseline;line-height:1;color:#1D1D2B;font-weight:500;letter-spacing:-.02em;white-space:nowrap}
+.brand-logo-mark{width:.72em;height:.72em;margin-left:.05em;flex:none}
