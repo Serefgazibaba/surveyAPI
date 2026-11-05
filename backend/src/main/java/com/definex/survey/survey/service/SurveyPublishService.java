@@ -11,6 +11,8 @@ import com.definex.survey.mail.entity.EmailType;
 import com.definex.survey.mail.service.EmailRequest;
 import com.definex.survey.mail.service.MailService;
 import com.definex.survey.mail.service.MailService.QueuedEmail;
+import com.definex.survey.participant.dto.ParticipantSummary;
+import com.definex.survey.participant.service.ParticipantDirectoryService;
 import com.definex.survey.survey.dto.InvitationSummaryResponse;
 import com.definex.survey.survey.dto.PublishSurveyRequest;
 import com.definex.survey.survey.dto.PublishSurveyResponse;
@@ -43,10 +45,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class SurveyPublishService {
 
     private static final Logger log = LoggerFactory.getLogger(SurveyPublishService.class);
+    private static final int MAX_PARTICIPANTS = 1000;
 
     private final SurveyRepository surveyRepository;
     private final InvitationRepository invitationRepository;
     private final UserDirectoryService userDirectory;
+    private final ParticipantDirectoryService participantDirectory;
     private final SecureTokenGenerator tokenGenerator;
     private final FrontendProperties frontend;
     private final MailService mailService;
@@ -54,12 +58,14 @@ public class SurveyPublishService {
     private final Clock clock;
 
     public SurveyPublishService(SurveyRepository surveyRepository, InvitationRepository invitationRepository,
-                                UserDirectoryService userDirectory, SecureTokenGenerator tokenGenerator,
+                                UserDirectoryService userDirectory, ParticipantDirectoryService participantDirectory,
+                                SecureTokenGenerator tokenGenerator,
                                 FrontendProperties frontend, MailService mailService,
                                 InvitationEmailComposer emailComposer, Clock clock) {
         this.surveyRepository = surveyRepository;
         this.invitationRepository = invitationRepository;
         this.userDirectory = userDirectory;
+        this.participantDirectory = participantDirectory;
         this.tokenGenerator = tokenGenerator;
         this.frontend = frontend;
         this.mailService = mailService;
@@ -82,10 +88,19 @@ public class SurveyPublishService {
                     "Anket yayınlanmaya hazır değil", incomplete);
         }
 
-        List<UserSummaryResponse> participants = resolveParticipants(request.userIds());
+        if (request.userIdsOrEmpty().isEmpty() && request.participantsOrEmpty().isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "İstek doğrulanamadı",
+                    List.of(new FieldErrorItem("participants", "NotEmpty", "En az bir katılımcı seçilmelidir")));
+        }
+        List<UserSummaryResponse> registered = resolveRegistered(request.userIdsOrEmpty());
+        List<ParticipantSummary> participants = participantDirectory.resolve(registered, request.participantsOrEmpty());
+        if (participants.size() > MAX_PARTICIPANTS) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "İstek doğrulanamadı",
+                    List.of(new FieldErrorItem("participants", "Size", "En fazla " + MAX_PARTICIPANTS + " katılımcı davet edilebilir")));
+        }
 
         List<InvitationSummaryResponse> invitations = new ArrayList<>();
-        for (UserSummaryResponse user : participants) {
+        for (ParticipantSummary user : participants) {
             String token = tokenGenerator.generate();
             Invitation invitation = invitationRepository.save(
                     new Invitation(survey, user.id(), tokenGenerator.hash(token), now));
@@ -97,7 +112,8 @@ public class SurveyPublishService {
             QueuedEmail email = mailService.queue(new EmailRequest(EmailType.SURVEY_INVITATION, ownerId,
                     survey.getId(), invitation.getId(), user.email(), user.fullName(),
                     emailComposer.compose(user.fullName(), survey.getTitle(), survey.getEndsAt(), url)));
-            invitations.add(new InvitationSummaryResponse(user.id(), user.email(), user.fullName(), email.status()));
+            invitations.add(new InvitationSummaryResponse(user.id(), user.userId(), user.email(), user.fullName(),
+                    email.status()));
         }
         survey.publish(now);
 
@@ -105,8 +121,11 @@ public class SurveyPublishService {
                 invitations.size(), invitations);
     }
 
-    /** Tekrarları atar, sırayı korur; davet edilemeyen id'ler için istek dizisindeki konumla hata döner. */
-    private List<UserSummaryResponse> resolveParticipants(List<UUID> requested) {
+    /** Kayıtlı kullanıcılar: tekrarları atar, sırayı korur; davet edilemeyen id'ler için istek dizisindeki konumla hata döner. */
+    private List<UserSummaryResponse> resolveRegistered(List<UUID> requested) {
+        if (requested.isEmpty()) {
+            return List.of();
+        }
         Set<UUID> unique = new LinkedHashSet<>(requested);
         Map<UUID, UserSummaryResponse> found = userDirectory.findInvitableByIds(unique);
 

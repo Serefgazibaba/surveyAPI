@@ -6,7 +6,7 @@ import Field from "../../components/Field.jsx";
 import TextArea from "../../components/TextArea.jsx";
 import TextInput from "../../components/TextInput.jsx";
 import Select from "../../components/Select.jsx";
-import Checkbox from "../../components/Checkbox.jsx";
+import Toggle from "../../components/Toggle.jsx";
 import Badge from "../../components/Badge.jsx";
 import { QUESTION_TYPES, hasOptions } from "../../utils/statusLabels.js";
 import { defaultSettings, newOption } from "../../utils/surveyForm.js";
@@ -14,6 +14,14 @@ import { defaultSettings, newOption } from "../../utils/surveyForm.js";
 const SCALES = Array.from({ length: 8 }, (_, i) => ({ value: String(i + 3), label: `${i + 3} puan` }));
 const DISPLAYS = [{ value: "RADIO", label: "Seçenek listesi" }, { value: "DROPDOWN", label: "Açılır liste" }];
 const toInt = v => (v === "" || v == null ? undefined : Number(v));
+
+/** Solda etiket (ve isteğe bağlı açıklama), sağda aç/kapa anahtarı. */
+function SwitchRow({ label, hint, checked, disabled, onChange }) {
+  return <div className="switch-row">
+    <span>{label}{hint && <small>{hint}</small>}</span>
+    <Toggle label={typeof label === "string" ? label : undefined} checked={!!checked} disabled={disabled} onChange={onChange} />
+  </div>;
+}
 
 /**
  * S-04 · Soru oluşturma / düzenleme.
@@ -46,16 +54,12 @@ export default function QuestionModal({ initial, isNew, textOnly, errors = {}, o
     footer={<><Button onClick={onClose}>Vazgeç</Button><Button variant="primary" onClick={() => onSave(q)}>{isNew ? "Oluştur" : "Uygula"}</Button></>}>
 
     <Field label="Soru" error={errors.text}>
-      <TextArea placeholder="Soru metnini yazın..." maxLength={1000} showCount autoFocus value={q.text} onChange={e => setQ({ ...q, text: e.target.value })} />
+      <TextArea placeholder="Soru metnini yazın..." maxLength={1000} autoFocus value={q.text} onChange={e => setQ({ ...q, text: e.target.value })} />
     </Field>
-    <div className="grid-2">
-      <Field label="Cevap Tipi" error={errors.type}>
-        <Select placeholder="Cevap Tipi Seçiniz..." options={QUESTION_TYPES} value={q.type} disabled={locked} onChange={changeType} />
-      </Field>
-      <Field label=" " as="div">
-        <Checkbox label="Zorunlu soru" checked={q.required} disabled={locked} onChange={v => setQ({ ...q, required: v })} />
-      </Field>
-    </div>
+    <Field label="Cevap Tipi" error={errors.type}>
+      <Select placeholder="Cevap Tipi Seçiniz..." options={QUESTION_TYPES} value={q.type} disabled={locked} onChange={changeType} />
+    </Field>
+    <SwitchRow label="Zorunlu soru" checked={q.required} disabled={locked} onChange={v => setQ({ ...q, required: v })} />
 
     {q.type === "LIKERT" && <>
       <Field label="Ölçek" error={errors["settings.scale"]}>
@@ -86,7 +90,7 @@ export default function QuestionModal({ initial, isNew, textOnly, errors = {}, o
         </div>
       </Field>
       {!locked && <Button size="sm" icon="plus" disabled={q.options.length >= 100} onClick={() => setQ({ ...q, options: [...q.options, newOption()] })}>Seçenek ekle</Button>}
-      <Checkbox label={'"Diğer" seçeneği (serbest metin) ekle'} checked={s.allowOther} disabled={locked} onChange={v => setSetting("allowOther", v)} />
+      <SwitchRow label={'"Diğer" seçeneği'} hint="Katılımcı listede olmayan bir cevabı kendisi yazabilir." checked={s.allowOther} disabled={locked} onChange={v => setSetting("allowOther", v)} />
     </>}
 
     {q.type === "SINGLE_CHOICE" && <Field label="Görünüm">
@@ -102,13 +106,11 @@ export default function QuestionModal({ initial, isNew, textOnly, errors = {}, o
       </Field>
     </div>}
 
-    {q.type === "FREE_TEXT" && <div className="grid-2">
+    {q.type === "FREE_TEXT" && <>
       <Field label="Maksimum karakter" error={errors["settings.maxLength"]}>
         <TextInput type="number" min={1} max={5000} value={s.maxLength ?? 1000} disabled={locked} onChange={e => setSetting("maxLength", toInt(e.target.value))} />
       </Field>
-      <Field label=" " as="div">
-        <Checkbox label="Çok satırlı cevap" checked={s.multiline} disabled={locked} onChange={v => setSetting("multiline", v)} />
-      </Field>
-    </div>}
+      <SwitchRow label="Çok satırlı cevap" checked={s.multiline} disabled={locked} onChange={v => setSetting("multiline", v)} />
+    </>}
   </Modal>;
 }

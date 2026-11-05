@@ -82,7 +82,7 @@ public class ParticipantInvitationService {
 
     private static InvitationContext toContext(Invitation invitation) {
         Survey survey = invitation.getSurvey();
-        return new InvitationContext(invitation.getId(), invitation.getUserId(), survey.getId(), survey.getTitle(),
+        return new InvitationContext(invitation.getId(), invitation.getParticipantId(), survey.getId(), survey.getTitle(),
                 survey.getStatus(), survey.getEndsAt(), invitation.getStatus());
     }
 }

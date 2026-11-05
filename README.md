@@ -118,6 +118,7 @@ com.definex.survey
 ├─ mail/        e-posta altyapısı: email_messages, JavaMailSender, MailService (anket/davet bilmez)
 ├─ common/      modüllerden bağımsız yardımcılar; entity/BaseEntity (UUID id, createdAt, updatedAt), dto/PageMeta
 ├─ auth/        /admin/auth/*, /admin/getAllUsers
+├─ participant/ katılımcılar (kayıtlı kullanıcı veya ad + e-postayla eklenen dış kişi); REST ucu yok, yayınlama kullanır
 ├─ survey/      /admin/surveys/*, /admin/upsertSurvey, /admin/publishSurvey, /admin/getMails, /admin/resendMails
 ├─ template/    /admin/templates/*, /admin/saveAsTemplate, /admin/upsertTemplate, /admin/createSurveyFromTemplate
 ├─ report/      /admin/reports, /admin/reports/{surveyId}, /admin/reports/{surveyId}/download (tablosuz; survey/user/auth service'lerinden okur)
@@ -252,8 +253,9 @@ curl -i -X DELETE http://localhost:8080/api/v1/admin/surveys/<surveyId> -H "Auth
 
 ## Örnek istekler (Yayınlama)
 
-Katılımcılar `users` tablosundaki `USER` rolündeki aktif kullanıcılardır. Admin anket düzenleme ekranında
-kullanıcıları listeleyip seçer, ardından anketi yayınlar. Her katılımcı için davete özel bir link üretilir
+Katılımcılar iki yoldan eklenir: kayıtlı kullanıcılar listesinden seçilir (`userIds`) veya uygulamada kaydı olmayan
+kişiler ad + e-posta ile eklenir (`participants`). Aynı e-posta tek davete düşer; elle girilen adres kayıtlı bir kullanıcıya
+aitse o kullanıcıya bağlanır. Katılımcı şifre kullanmaz, davet linkiyle girer. Her katılımcı için davete özel bir link üretilir
 (`{FRONTEND_BASE_URL}/s/{token}`); token'ın yalnızca hash'i saklanır. Link yalnızca davet mailiyle gider; yanıtta dönmez
 (dev profilinde log'a yazılır).
 
@@ -265,7 +267,7 @@ curl -s "http://localhost:8080/api/v1/admin/getAllUsers?q=zeynep&page=1&size=20"
 # 2. Yayınla → 200; anket PUBLISHED olur, davet mailleri kuyruğa alınır (emailStatus: QUEUED)
 curl -s -X POST http://localhost:8080/api/v1/admin/publishSurvey \
   -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" \
-  -d '{"surveyId":"<surveyId>","userIds":["0a1b2c3d-0000-4000-8000-000000000101"]}'
+  -d '{"surveyId":"<surveyId>","userIds":["0a1b2c3d-0000-4000-8000-000000000101"],"participants":[{"fullName":"Ayşe Demir","email":"ayse.demir@musteri.com"}]}'
 ```
 
 Yayınlamadan önce tamlık kontrol edilir; eksikler tek seferde döner:

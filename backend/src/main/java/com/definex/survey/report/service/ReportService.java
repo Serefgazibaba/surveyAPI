@@ -1,9 +1,9 @@
 package com.definex.survey.report.service;
 
-import com.definex.survey.auth.dto.UserSummaryResponse;
-import com.definex.survey.auth.service.UserDirectoryService;
 import com.definex.survey.exception.ApiException;
 import com.definex.survey.exception.FieldErrorItem;
+import com.definex.survey.participant.dto.ParticipantSummary;
+import com.definex.survey.participant.service.ParticipantDirectoryService;
 import com.definex.survey.report.dto.ReportListResponse;
 import com.definex.survey.report.dto.SurveyReportResponse;
 import com.definex.survey.report.dto.SurveyReportResponse.AnswerValue;
@@ -57,15 +57,15 @@ public class ReportService {
     private final SurveyService surveyService;
     private final SurveyReportDataService surveyData;
     private final ResponseQueryService responses;
-    private final UserDirectoryService users;
+    private final ParticipantDirectoryService participants;
     private final Clock clock;
 
     public ReportService(SurveyService surveyService, SurveyReportDataService surveyData,
-                         ResponseQueryService responses, UserDirectoryService users, Clock clock) {
+                         ResponseQueryService responses, ParticipantDirectoryService participants, Clock clock) {
         this.surveyService = surveyService;
         this.surveyData = surveyData;
         this.responses = responses;
-        this.users = users;
+        this.participants = participants;
         this.clock = clock;
     }
 
@@ -123,17 +123,17 @@ public class ReportService {
     }
 
     /** Kayıtlı modda yanıt → katılımcı; anonim modda boş. */
-    Map<UUID, UserSummaryResponse> participantsOf(SurveyDetailResponse survey, List<ResponseRecord> records) {
+    Map<UUID, ParticipantSummary> participantsOf(SurveyDetailResponse survey, List<ResponseRecord> records) {
         if (survey.responseMode() != ResponseMode.IDENTIFIED) {
             return Map.of();
         }
         List<UUID> invitationIds = records.stream().map(ResponseRecord::invitationId).filter(Objects::nonNull).toList();
-        Map<UUID, UUID> userByInvitation = surveyData.participantsByInvitation(invitationIds);
-        Map<UUID, UserSummaryResponse> userById = users.findSummariesByIds(userByInvitation.values());
-        Map<UUID, UserSummaryResponse> result = new HashMap<>();
+        Map<UUID, UUID> participantByInvitation = surveyData.participantsByInvitation(invitationIds);
+        Map<UUID, ParticipantSummary> participantById = participants.findSummariesByIds(participantByInvitation.values());
+        Map<UUID, ParticipantSummary> result = new HashMap<>();
         for (ResponseRecord r : records) {
-            UUID userId = r.invitationId() == null ? null : userByInvitation.get(r.invitationId());
-            UserSummaryResponse user = userId == null ? null : userById.get(userId);
+            UUID participantId = r.invitationId() == null ? null : participantByInvitation.get(r.invitationId());
+            ParticipantSummary user = participantId == null ? null : participantById.get(participantId);
             if (user != null) {
                 result.put(r.responseId(), user);
             }
@@ -144,12 +144,12 @@ public class ReportService {
     // ---------------------------------------------------------------- hesaplar
 
     private List<ParticipantResponse> participantResponses(SurveyDetailResponse survey, List<ResponseRecord> records) {
-        Map<UUID, UserSummaryResponse> people = participantsOf(survey, records);
+        Map<UUID, ParticipantSummary> people = participantsOf(survey, records);
         AnswerFormatter formatter = new AnswerFormatter(survey.questions());
         Map<UUID, Integer> order = new HashMap<>();
         survey.questions().forEach(q -> order.put(q.id(), q.number()));
         return records.stream().map(r -> {
-            UserSummaryResponse user = people.get(r.responseId());
+            ParticipantSummary user = people.get(r.responseId());
             List<AnswerValue> answers = r.answers().stream()
                     .sorted((a, b) -> Integer.compare(order.getOrDefault(a.questionId(), Integer.MAX_VALUE),
                             order.getOrDefault(b.questionId(), Integer.MAX_VALUE)))

@@ -17,20 +17,20 @@ import java.util.UUID;
 /**
  * Katılımcının ankete daveti. Davet linkindeki token'ın yalnızca SHA-256 hash'i saklanır (NFR-02).
  * Geçerlilik ayrı tutulmaz; anketin {@code endsAt} değerinden hesaplanır (FR-51).
- * Kişisel bilgi (e-posta, ad) tutulmaz; {@code userId} ile auth'un users tablosundan okunur.
+ * Kişisel bilgi (e-posta, ad) tutulmaz; {@code participantId} ile participant modülünden okunur.
  */
 @Entity
 @Table(name = "invitations",
-        uniqueConstraints = @UniqueConstraint(name = "uk_invitations_survey_user", columnNames = {"survey_id", "user_id"}),
-        indexes = @Index(name = "ix_invitations_user_id", columnList = "user_id"))
+        uniqueConstraints = @UniqueConstraint(name = "uk_invitations_survey_participant", columnNames = {"survey_id", "participant_id"}),
+        indexes = @Index(name = "ix_invitations_participant_id", columnList = "participant_id"))
 public class Invitation extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "survey_id", nullable = false)
     private Survey survey;
 
-    @Column(name = "user_id", nullable = false, updatable = false)
-    private UUID userId;
+    @Column(name = "participant_id", nullable = false, updatable = false)
+    private UUID participantId;
 
     @Column(nullable = false, unique = true, length = 64)
     private String tokenHash;
@@ -47,9 +47,9 @@ public class Invitation extends BaseEntity {
     protected Invitation() {
     }
 
-    public Invitation(Survey survey, UUID userId, String tokenHash, Instant invitedAt) {
+    public Invitation(Survey survey, UUID participantId, String tokenHash, Instant invitedAt) {
         this.survey = survey;
-        this.userId = userId;
+        this.participantId = participantId;
         this.tokenHash = tokenHash;
         this.status = InvitationStatus.PENDING;
         this.invitedAt = invitedAt;
@@ -77,8 +77,8 @@ public class Invitation extends BaseEntity {
         return survey;
     }
 
-    public UUID getUserId() {
-        return userId;
+    public UUID getParticipantId() {
+        return participantId;
     }
 
     public InvitationStatus getStatus() {

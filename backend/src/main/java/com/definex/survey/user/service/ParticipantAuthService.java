@@ -40,7 +40,7 @@ public class ParticipantAuthService {
         ParticipantAccessPolicy.check(invitation, now);
 
         InvitationContext started = invitations.markStarted(invitation.invitationId());
-        AccessToken token = jwtTokenService.issueAccessToken(started.userId().toString(), List.of(Roles.USER),
+        AccessToken token = jwtTokenService.issueAccessToken(started.participantId().toString(), List.of(Roles.USER),
                 Map.of(ParticipantPrincipal.INVITATION_CLAIM, started.invitationId().toString(),
                         ParticipantPrincipal.SURVEY_CLAIM, started.surveyId().toString()),
                 started.surveyEndsAt());

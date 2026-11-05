@@ -13,5 +13,9 @@ export const upsertSurvey = payload => api.post("/admin/upsertSurvey", payload);
 /** DELETE /admin/surveys/{id} → 204 (yalnızca DRAFT) */
 export const deleteSurvey = id => api.del(`/admin/surveys/${id}`);
 
-/** POST /admin/publishSurvey { surveyId, userIds } → PublishSurveyResponse */
-export const publishSurvey = (surveyId, userIds) => api.post("/admin/publishSurvey", { surveyId, userIds });
+/**
+ * POST /admin/publishSurvey { surveyId, userIds?, participants? } → PublishSurveyResponse
+ * userIds: kayıtlı kullanıcılar; participants: uygulamada kayıtlı olmayan kişiler [{ fullName, email }].
+ */
+export const publishSurvey = (surveyId, { userIds = [], participants = [] }) =>
+  api.post("/admin/publishSurvey", { surveyId, userIds, participants });

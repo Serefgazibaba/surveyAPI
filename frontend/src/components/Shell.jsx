@@ -1,38 +1,48 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import Icon from "./Icon.jsx";
-import ComingSoon from "./ComingSoon.jsx";
 import { useAuth } from "../auth/AuthContext.jsx";
+import { useNotificationCount } from "../hooks/useNotifications.js";
 
-// [yol | null (yakında), ikon, etiket]
+// [yol, ikon, etiket]
 const SECTIONS = [
-  ["Benim Alanım", [[null, "home", "Dashboard"], ["/surveys", "list", "Anketlerim"], ["/surveys/new", "plus", "Anket Oluştur"], ["/templates", "template", "Şablonlar"]]],
-  ["Analiz", [["/reports", "chart", "Raporlar"], ["/mails", "mail", "Gönderim Durumu"], [null, "users", "Katılımcı Listeleri"]]],
+  ["Benim Alanım", [["/dashboard", "home", "Dashboard"], ["/surveys", "list", "Anketlerim"], ["/surveys/new", "plus", "Anket Oluştur"], ["/templates", "template", "Şablonlar"]]],
+  ["Analiz", [["/reports", "chart", "Raporlar"], ["/mails", "mail", "Gönderim Durumu"], ["/participant-lists", "users", "Katılımcı Listeleri"]]],
 ];
+
+// Alt sayfalarında da aktif kalan menü öğeleri ("Anketlerim", "Anket Oluştur" hariç).
+const PREFIX_ACTIVE = ["/templates", "/reports"];
 
 function initials(name = "") {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toLocaleUpperCase("tr")).join("") || "?";
 }
 
-function NavItem({ to, icon, label }) {
+function NavItem({ to, icon, label, badge }) {
   const { pathname } = useLocation();
-  if (!to) return <ComingSoon block><button type="button" className="nav-item" disabled><Icon name={icon} />{label}</button></ComingSoon>;
-  // "Anketlerim" ve "Şablonlar" alt sayfalarında da aktif kalır ("Anket Oluştur" hariç).
   const active = to === "/surveys" ? pathname.startsWith("/surveys") && pathname !== "/surveys/new"
-    : to === "/templates" || to === "/reports" ? pathname.startsWith(to) : pathname === to;
-  return <NavLink to={to} className={`nav-item${active ? " active" : ""}`}><Icon name={icon} />{label}</NavLink>;
+    : PREFIX_ACTIVE.includes(to) ? pathname.startsWith(to) : pathname === to;
+  // NavLink kullanılmaz: kendi önek eşleşmesiyle "active" ekler (/surveys, /surveys/new'de de aktif görünürdü).
+  return <Link to={to} className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
+    <Icon name={icon} />{label}
+    {badge > 0 && <span className="nav-badge" aria-label={`${badge} yeni`}>{badge > 99 ? "99+" : badge}</span>}
+  </Link>;
 }
 
-/** Admin sayfa iskeleti: sol menü + içerik. */
+/** Admin sayfa iskeleti: sol menü (ekran yüksekliğinde, sabit) + içerik. */
 export default function Shell({ children }) {
   const { user, logout } = useAuth();
+  const notifications = useNotificationCount();
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="logo">S</div><div><b>Survey Tool</b><small>DefineX</small></div></div>
-      {SECTIONS.map(([title, items]) => <div key={title}>
-        <div className="nav-label">{title}</div>
-        {items.map(([to, icon, label]) => <NavItem key={label} to={to} icon={icon} label={label} />)}
-      </div>)}
+      <nav className="sidebar-nav">
+        {SECTIONS.map(([title, items]) => <div key={title}>
+          <div className="nav-label">{title}</div>
+          {items.map(([to, icon, label]) => <NavItem key={label} to={to} icon={icon} label={label} />)}
+        </div>)}
+      </nav>
       <div className="sidebar-bottom">
+        <NavItem to="/whats-new" icon="sparkle" label="Yenilikler" />
+        <NavItem to="/notifications" icon="bell" label="Bildirimler" badge={notifications} />
         <div className="profile">
           <div className="avatar">{initials(user?.fullName)}</div>
           <div><b>{user?.fullName}</b><small>{user?.email}</small></div>

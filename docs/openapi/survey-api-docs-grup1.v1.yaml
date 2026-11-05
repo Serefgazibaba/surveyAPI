@@ -436,8 +436,13 @@ paths:
       operationId: adminPublishSurvey
       summary: Anketi yayınla
       description: |
-        "Gönder" aksiyonu (FR-42). Seçilen katılımcılar (`GET /admin/getAllUsers`) için davet oluşturur ve anketi
-        `DRAFT` → `PUBLISHED` yapar.
+        "Gönder" aksiyonu (FR-40, FR-42). Davet oluşturur ve anketi `DRAFT` → `PUBLISHED` yapar. Katılımcılar iki
+        kaynaktan gelir; birlikte de kullanılabilir, toplamda en az 1, en fazla 1000 kişi:
+        - `userIds`: kayıtlı kullanıcılar (`GET /admin/getAllUsers`).
+        - `participants`: uygulamada kayıtlı olmayan kişiler (ad + e-posta). E-posta küçük harfe çevrilir; adres aktif bir
+          `USER` hesabına aitse katılımcı o kullanıcıya bağlanır.
+        Aynı e-posta tek katılımcıdır (iki kaynaktan da gelse tek davet). Daha önce eklenmiş bir kişinin adı değişmez.
+        Katılımcı deneyimi aynıdır: herkes davet linkiyle, şifresiz girer.
 
         **Kontroller (sırayla)**
         1. Anket yoksa veya başka bir admin'e aitse `404`.
@@ -453,7 +458,9 @@ paths:
            | `MIN_TWO_OPTIONS` | `questions[i].options` | seçimli soruda etiketi dolu en az 2 seçenek (FR-22) |
            | `LABEL_REQUIRED` | `questions[i].options[j].label` | dolu |
            | `MAX_SELECT_EXCEEDS_OPTIONS` | `questions[i].settings.maxSelect` | seçenek sayısını aşamaz |
-        4. `userIds` içinde bulunamayan, `USER` rolünde olmayan veya pasif kullanıcı varsa `422 INVALID_PARTICIPANTS`
+        4. Hiç katılımcı yoksa `400` (`errors[].field` = `participants`). Geçersiz e-posta veya boş ad `400`
+           (`participants[i].email` / `participants[i].fullName`).
+        5. `userIds` içinde bulunamayan, `USER` rolünde olmayan veya pasif kullanıcı varsa `422 INVALID_PARTICIPANTS`
            (`errors[].field` = `userIds[i]`). Tekrarlanan id'ler tekilleştirilir.
 
         **Davetler**
@@ -480,7 +487,9 @@ paths:
               surveyId: 9a7d3c21-4b8e-4f0a-a1c2-7e5d9b3f2a68
               userIds:
                 - 0a1b2c3d-0000-4000-8000-000000000101
-                - 0a1b2c3d-0000-4000-8000-000000000102
+              participants:
+                - fullName: Ayşe Demir
+                  email: ayse.demir@musteri.com
       responses:
         '200':
           description: Anket yayınlandı, davetler oluşturuldu
@@ -1548,7 +1557,9 @@ components:
           description: Davet linkindeki token (`{FRONTEND_BASE_URL}/s/{invitationToken}`; 256 bit rastgele)
     UserLoginResponse:
       type: object
-      description: Katılımcı oturumu. Refresh token yoktur; token anketin bitiş tarihine kadar geçerlidir.
+      description: |
+        Katılımcı oturumu. Refresh token yoktur; token anketin bitiş tarihine kadar geçerlidir.
+        JWT içeriği: `sub` = katılımcı (participants.id), `inv` = davet, `svy` = anket, `roles` = [USER].
       required: [accessToken, tokenType, expiresIn, expiresAt, surveyId, surveyTitle, invitationStatus]
       properties:
         accessToken:
@@ -2054,19 +2065,38 @@ components:
           $ref: '#/components/schemas/PageMeta'
     PublishSurveyRequest:
       type: object
-      required: [surveyId, userIds]
+      description: '`userIds` ve `participants` opsiyoneldir; toplamda en az 1 kişi gerekir.'
+      required: [surveyId]
       properties:
         surveyId:
           type: string
           format: uuid
         userIds:
           type: array
-          minItems: 1
           maxItems: 1000
-          description: Davet edilecek katılımcılar; tekrarlananlar tekilleştirilir
+          description: Kayıtlı kullanıcılar (`GET /admin/getAllUsers`); tekrarlananlar tekilleştirilir
           items:
             type: string
             format: uuid
+        participants:
+          type: array
+          maxItems: 1000
+          description: Uygulamada kayıtlı olmayan kişiler; aynı e-posta tek davete düşer
+          items:
+            $ref: '#/components/schemas/ParticipantInput'
+    ParticipantInput:
+      type: object
+      required: [fullName, email]
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: Baştaki/sondaki boşluklar atılır, küçük harfe çevrilir
     PublishSurveyResponse:
       type: object
       required: [surveyId, status, publishedAt, invitationCount, invitations]
@@ -2098,11 +2128,15 @@ components:
             emailStatus: QUEUED
     InvitationSummary:
       type: object
-      required: [userId, email, fullName, emailStatus]
+      required: [participantId, email, fullName, emailStatus]
       properties:
+        participantId:
+          type: string
+          format: uuid
         userId:
           type: string
           format: uuid
+          description: Kişi uygulamada kayıtlı bir kullanıcıysa dolu; dış katılımcıda yanıtta yer almaz
         email:
           type: string
           format: email

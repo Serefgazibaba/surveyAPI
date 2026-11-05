@@ -1,6 +1,6 @@
 package com.definex.survey.report.service;
 
-import com.definex.survey.auth.dto.UserSummaryResponse;
+import com.definex.survey.participant.dto.ParticipantSummary;
 import com.definex.survey.survey.dto.QuestionResponse;
 import com.definex.survey.survey.dto.SurveyDetailResponse;
 import com.definex.survey.survey.entity.ResponseMode;
@@ -68,13 +68,13 @@ public class ReportCsvWriter {
             writeRow(writer, header);
 
             responses.forEachBatch(survey.id(), BATCH_SIZE, batch -> {
-                Map<UUID, UserSummaryResponse> people = identified ? reportService.participantsOf(survey, batch) : Map.of();
+                Map<UUID, ParticipantSummary> people = identified ? reportService.participantsOf(survey, batch) : Map.of();
                 for (ResponseRecord r : batch) {
                     Map<UUID, AnswerRecord> byQuestion = new HashMap<>();
                     r.answers().forEach(a -> byQuestion.put(a.questionId(), a));
                     List<String> cells = new ArrayList<>();
                     if (identified) {
-                        UserSummaryResponse user = people.get(r.responseId());
+                        ParticipantSummary user = people.get(r.responseId());
                         cells.add(user == null ? "" : user.fullName());
                         cells.add(user == null ? "" : user.email());
                     }
